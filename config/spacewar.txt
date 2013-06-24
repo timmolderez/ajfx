@@ -1,0 +1,14 @@
+// Input source files
+-sourceroots
+C:/Users/Tim/Desktop/Tools/eclipse_ee/workspace/Spacewar Example/src
+
+// Libraries
+-cp
+C:/Users/Tim/Documents/ajfx/lib/abc-runtime.jar
+;C:/Program Files/Java/jre6/lib/jce.jar
+;C:/Program Files/Java/jre6/lib/jsse.jar
+;C:/Users/Tim/Desktop/Tools/eclipse_ee/plugins/org.aspectj.runtime_1.6.12.20110613132200/aspectjrt.jar
+
+// Output
+-outjar
+spacewar.jar

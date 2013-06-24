@@ -1,0 +1,8 @@
+-sourceroots
+C:/Users/Tim/Desktop/Tools/eclipse_ee/workspace/Observer Example/src
+
+-main-class
+observer.Demo
+
+-outjar
+observer.jar

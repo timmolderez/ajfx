@@ -1,0 +1,8 @@
+-sourceroots
+C:/Users/Tim/Desktop/Tools/eclipse_ee/workspace/Tracing Example/src
+
+-main-class
+tracing.ExampleMain
+
+-outjar
+tracing.jar
