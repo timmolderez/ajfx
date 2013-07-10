@@ -16,21 +16,6 @@
     [damp.ekeko.soot
      [soot :as jsoot]]))
 
-;; Sandbox to tinker with GASR..
-;; @author Tim
-
-(comment
-(damp.ekeko/ekeko* [?aspect ?field]
-                      (l/fresh [?advice]
-                             (w/aspect-advice ?aspect ?advice)
-                             (ajsoot/advice|writes-field ?advice ?field)))
-
-(damp.ekeko/ekeko* [?advice ?soot|unit]
-(l/fresh [?soot|method]
-         (ajsoot/advice-soot|method ?advice ?soot|method)
-         (jsoot/soot|method-soot|unit ?soot|method ?soot|unit)))
-)
-
 (defn 
   soot|unit|invocation
   "Is ?unit a JInvokeStmt?"
@@ -51,6 +36,7 @@
 
 (defn
   soot|value|invocation-soot|method
+  "Relate a invoke expression to the method being called"
   [?value ?method]
   (l/fresh [?unit]
            (soot|unit|invocation-soot|value|invocation ?unit ?value)
@@ -95,58 +81,19 @@
            (soot|field-name ?field ?fieldname)
   ))
 
+(defn advice|ajcfield|set-soot|field
+  [?advice ?field]
+  "Relates an advice to the fields it modifies (directly in the advice body)"
+  (l/fresh [?unit ?setMethod ?value]
+           (w/advice ?advice)
+           (advice-soot|unit ?advice ?unit)
+           (soot|unit|invocation-soot|value|invocation ?unit ?value)
+           (soot|value|invocation-soot|method ?value ?setMethod)
+           (soot|method|ajcfield|set-soot|field ?setMethod ?field)))
 
-(comment
-(defn 
-  soot|unit|ajcwrites-soot|field
-  [?unit ?field]
-  (l/fresh [?expr ?method ?fieldname]
-  (soot|unit|invocation-soot|value|invocation ?unit ?expr)
-  (soot|value|invocation-soot|method ?expr ?method)
-  (soot|method|ajcfield|set-fieldname ?method ?fieldname)
-  (soot|field-name ?field ?fieldname))))
-
-
-
-
-
-
-
-; Fetch all JInvokeStmts inside advice
-
-(damp.ekeko/ekeko* [?advice ?unit]
-(l/fresh [?method]
-         (ajsoot/advice-soot|method ?advice ?method)
-         (jsoot/soot|method-soot|unit ?method ?unit)))
-
-(comment
-(damp.ekeko/ekeko [?unit ?value]
-(l/fresh [?soot|method ?advice ?usebox]
-         (ajsoot/advice-soot|method ?advice ?soot|method)
-         (jsoot/soot|method-soot|unit ?soot|method ?unit)
-         
-         (jsoot/soot-unit :JInvokeStmt ?unit)
-        ; (succeeds (instance? soot.jimple.internal.JInvokeStmt ?unit))
-         
-     ;    (jsoot/soot-unit-usebox ?unit ?usebox)
-      ;   (jsoot/soot-valuebox-value ?usebox ?value)
-         
-         )))
-
-
-; Fetch all aspects
-(comment
-  (damp.ekeko/ekeko* [?aspect] (w/aspect ?aspect))
-
-; Relate aspects to the fields they modify
-  (damp.ekeko/ekeko* [?aspect ?field]
-                   (l/fresh [?advice]
-                          (aspect-advice ?aspect ?advice)
-                          (ajsoot/advice|writes-field ?advice ?field)))
-
-(damp.ekeko/ekeko* [?advice ?field]
-                          (ajsoot/advice|writes-field ?advice ?field))
-
-
-
-)
+(defn advice-soot|unit
+  [?advice ?unit]
+  "Relates an advice to the soot units its body contains"
+  (l/fresh [?method]
+           (ajsoot/advice-soot|method ?advice ?method)
+           (jsoot/soot|method-soot|unit ?method ?unit)))
