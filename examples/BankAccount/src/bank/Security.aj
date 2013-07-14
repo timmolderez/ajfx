@@ -6,10 +6,12 @@ public aspect Security {
 	void around(Account to, int amount): call(void Account.transfer(Account, int)) && args(to, amount) {
 //		System.out.println("Yo!");
 //		this.someField = 5 + to.amount;
-//		to.amount = 456;
-		helperMethod();
-		to.foo();
-		
+		to.amount = 456 + to.amount;
+		to.amount = 456 + to.amount;
+		to.f.bar = 123;
+//		helperMethod();
+//		to.foo();
+//		
 //		System.out.println(this.someField);
 //		proceed(to, amount);
 	}

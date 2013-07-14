@@ -65,3 +65,8 @@
 (l/fresh [?soot|method]
          (ajsoot/advice-soot|method ?advice ?soot|method)
          (jsoot/soot|method-soot|unit ?soot|method ?soot|unit)))
+
+; Get the type of an object..
+(damp.ekeko/ekeko* [?adv ?field ?type]
+                   (advice|fieldWrite-soot|field ?adv ?field)
+                    (equals ?type (.getClass ?field)))

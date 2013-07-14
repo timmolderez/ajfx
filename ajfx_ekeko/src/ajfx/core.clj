@@ -16,15 +16,22 @@
     [damp.ekeko.soot
      [soot :as jsoot]]))
 
-(defn 
+(defn advice-soot|unit
+  [?advice ?unit]
+  "Relates an advice to the soot units its body contains"
+  (l/fresh [?method]
+           (ajsoot/advice-soot|method ?advice ?method)
+           (jsoot/soot|method-soot|unit ?method ?unit)))
+
+(defn-
   soot|unit|invocation
   "Is ?unit a JInvokeStmt?"
-  [?unit ]
+  [?unit]
   (l/all
     (jsoot/soot-unit :JInvokeStmt ?unit)
     ))
 
-(defn 
+(defn-
   soot|unit|invocation-soot|value|invocation
   "Relation between ?unit and the invoke expression it contains"
   [?unit ?value]
@@ -44,7 +51,7 @@
     ))
 
 
-(defn 
+(defn-
   soot|method|static
   "Is this soot method static?"
   [?method]  
@@ -81,19 +88,68 @@
            (soot|field-name ?field ?fieldname)
   ))
 
+(defn- soot|method|ajcfield|set-soot|field
+  "Relate a soot method representing a field write to the corresponding soot field"
+  [?method ?field]
+  (l/fresh [?methodname ?split ?fieldname]
+           (soot|method-name ?method ?methodname)
+           (equals ?split (clojure.string/split ?methodname #"\$")) 
+           (equals "ajc" (nth ?split 0))
+           (equals "inlineAccessFieldSet" (nth ?split 1) )
+           (equals ?fieldname (last ?split))
+           (soot|field-name ?field ?fieldname)
+  ))
+
+(defn- soot|method|ajcfield|get-soot|field
+  "Relate a soot invoke expression representing an ajc field read to the corresponding soot field.
+(It seems such reads are only produced when accessing stuff within your 'package scope'..)"
+  [?method ?field]
+  (l/fresh [?methodName ?split ?fieldName ?fieldType]
+           ; Find ?field based on name
+           (soot|method-name ?method ?methodName)
+           (equals ?split (clojure.string/split ?methodName #"\$")) 
+           (equals "ajc" (nth ?split 0))
+           (equals "inlineAccessFieldGet" (nth ?split 1) )
+           (equals ?fieldName (last ?split))
+           (soot|field-name ?field ?fieldName)
+           
+           ; Find ?field based on type (which can be found in the first parameter of the invoke expression)
+           (equals ?fieldType (.getType(.getDeclaringClass ?field)))
+           (equals ?fieldType (.getParameterType ?method 0))))
+
+(defn- soot|method|ajcfield|set-soot|field
+  "Relate a soot invoke expression representing an ajc field write to the corresponding soot field.
+(It seems such writes are only produced when modifying stuff within your 'package scope'..)"
+  [?method ?field]
+  (l/fresh [?methodName ?split ?fieldName ?fieldType]
+           ; Find ?field based on name
+           (soot|method-name ?method ?methodName)
+           (equals ?split (clojure.string/split ?methodName #"\$")) 
+           (equals "ajc" (nth ?split 0))
+           (equals "inlineAccessFieldSet" (nth ?split 1) )
+           (equals ?fieldName (last ?split))
+           (soot|field-name ?field ?fieldName)
+           
+           ; Find ?field based on type (which can be found in the second parameter of the invoke expression)
+           (equals ?fieldType (.getType(.getDeclaringClass ?field)))
+           (equals ?fieldType (.getParameterType ?method 1))))
+
+(defn advice|ajcfield|get-soot|field
+  [?advice ?field]
+  "Relates an advice to the fields it modifies (directly in the advice body)"
+  (l/fresh [?getMethod ?value ?unit]
+           (w/advice ?advice)
+           (advice-soot|unit ?advice ?unit)
+           (soot|unit|invocation-soot|value|invocation ?unit ?value)
+           (soot|value|invocation-soot|method ?value ?getMethod)
+           (soot|method|ajcfield|get-soot|field ?getMethod ?field)))
+
 (defn advice|ajcfield|set-soot|field
   [?advice ?field]
   "Relates an advice to the fields it modifies (directly in the advice body)"
-  (l/fresh [?unit ?setMethod ?value]
+  (l/fresh [?setMethod ?value ?unit]
            (w/advice ?advice)
            (advice-soot|unit ?advice ?unit)
            (soot|unit|invocation-soot|value|invocation ?unit ?value)
            (soot|value|invocation-soot|method ?value ?setMethod)
            (soot|method|ajcfield|set-soot|field ?setMethod ?field)))
-
-(defn advice-soot|unit
-  [?advice ?unit]
-  "Relates an advice to the soot units its body contains"
-  (l/fresh [?method]
-           (ajsoot/advice-soot|method ?advice ?method)
-           (jsoot/soot|method-soot|unit ?method ?unit)))

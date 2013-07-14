@@ -1,7 +1,10 @@
 package bank;
 
+import bank.test.Foo;
+
 public class Account {
 	int amount;
+	Foo f = new Foo();
 	
 	public Account(int m) {
 		amount = m;
