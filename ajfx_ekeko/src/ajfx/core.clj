@@ -93,7 +93,7 @@
            (equals ?fieldName (last ?split))
            (soot|field-name ?field ?fieldName)
            
-           ; Find ?field based on type (which can be found in the first parameter of the invoke expression)
+           ; Find ?field based on class containing the field
            (equals ?fieldType (.getType(.getDeclaringClass ?field)))
            (equals ?fieldType (.getParameterType ?method 0))))
 
@@ -103,7 +103,7 @@
 (It seems such writes are only produced when modifying stuff within your 'package scope'..)"
   [?method ?field]
   (l/fresh [?methodName ?split ?fieldName ?fieldType]
-           ; Find ?field based on name
+           ; Find ?field based on its name
            (soot|method-name ?method ?methodName)
            (equals ?split (clojure.string/split ?methodName #"\$")) 
            (equals "ajc" (nth ?split 0))
@@ -111,9 +111,10 @@
            (equals ?fieldName (last ?split))
            (soot|field-name ?field ?fieldName)
            
-           ; Find ?field based on type (which can be found in the second parameter of the invoke expression)
+           ; Find ?field based on class containing the field
            (equals ?fieldType (.getType(.getDeclaringClass ?field)))
-           (equals ?fieldType (.getParameterType ?method 1))))
+           (equals ?fieldType (.getParameterType ?method 0))
+           ))
 
 (defn-
   soot|method|ajccall-soot|method
@@ -172,11 +173,48 @@
                     [
                      (jsoot/soot-unit-calls-method ?unit ?method)])))
 
+(defn inferAdviceFrame
+  [advice]
+  "Infer the frame condition of an advice"
+  (damp.ekeko/ekeko [?field]
+                    (advice|field|set-soot|field advice ?field)
+                    ))
 
 
 
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
+  
+  (damp.ekeko/ekeko*
+     [a b c]
+     (advice-soot|unit a b)
+     (jsoot/soot-unit c b))
+  
+  ; Using inferAdviceFrame
+  (let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
+     (.getClass (first allAdvice)))
+  
+  (let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
+     (inferAdviceFrame (first(first allAdvice))))
+  
+  (let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
+     (map first allAdvice))
+  
+  
+  
+(let [x [1 2 3]]
+  (l/run* [q]
+      (l/membero q x)
+      (l/membero q [2 3 4])))
+
+(defn test2
+  [x]
+  (l/run* [q]
+      (l/membero q x)
+      (l/membero q [2 3 4])))
 
 (defn 
   soot-unit-calls-method2
