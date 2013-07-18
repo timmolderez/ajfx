@@ -4,6 +4,7 @@
   ajfx.core
   (:refer-clojure :exclude [== type declare class])
   (:require [clojure.core.logic :as l] )
+  (:require clojure.inspector)
   (:use [damp.ekeko logic])
   (:use [damp.ekeko])
   (:require 
@@ -43,6 +44,60 @@
     (equals ?value (.getInvokeExpr ?unit)
               )))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Go fetch the container in an inlineAccessFieldSet unit (i.e. the foo in foo.bar=baz;)
+(defn-
+  fieldAssignmentUnit-fieldContainer
+  [?val ?unit ]
+  (l/fresh [?meth  ?methodName ?split]
+    (soot|value|invocation-soot|method ?unit ?meth)
+    
+    
+    (soot|method-name ?meth ?methodName)
+    (equals ?split (clojure.string/split ?methodName #"\$")) 
+    (equals "ajc" (nth ?split 0))
+    (equals "inlineAccessFieldSet" (nth ?split 1) )
+    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))
+              ))
+
+(defn
+  methodCall-receiver
+  [?val ?unit]
+  (l/fresh [?meth  ?methodName ?split]
+    (soot|value|invocation-soot|method ?unit ?meth)
+    (soot|method-name ?meth ?methodName)
+    (equals ?split (clojure.string/split ?methodName #"\$")) 
+    (equals "ajc" (nth ?split 0))
+    (equals "inlineAccessMethod" (nth ?split 1) )
+    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))
+           ))
+
+(defn
+  virtMethodCall-receiver
+  [?val ?unit]
+  (l/fresh [?adv]
+    (advice-soot|unit ?adv ?unit)
+    (jsoot/soot-unit :JInvokeStmt ?unit)
+    (equals ?val (?unit .getInvokeExpr))
+    ;(soot|unit|invocation ?unit)
+    ;(equals c (.toString b))
+           ))
+
+(clojure.inspector/inspect-tree (damp.ekeko/ekeko
+  [a b]
+  (virtMethodCall-receiver a b)
+  ))
+
+
+
+(clojure.inspector/inspect-tree (damp.ekeko/ekeko
+  [a b ]
+  (l/all 
+    (virtMethodCall-receiver a b)
+  )))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn
   soot|value|invocation-soot|method
@@ -175,7 +230,17 @@
 
 (defn inferAdviceFrame
   [advice]
-  "Infer the frame condition of an advice"
+  "Infer the frame condition of an advice.
+@param advice the advice we want to analyse (obtain via w/advice)
+@return the frame condition is a list of variables that might change, such that this list can be understood by the advice itself
+For example, the function could return a list like this:
+[
+  [aCar, SootField<wheel>],                             ; refers to aCar.wheel , where aCar is a parameter of the advice
+  [aTruck, SootField<cargo>, SootField<contents>],      ; aTruck.cargo.contents
+  [this, SootField<cargo>]                              ; this.cargo
+]
+
+"
   (damp.ekeko/ekeko [?field]
                     (advice|field|set-soot|field advice ?field)
                     ))
@@ -187,6 +252,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
+  
+  (clojure.inspector/inspect-tree (damp.ekeko/ekeko
+  [a b]
+  (fieldAssignmentUnit-fieldContainer a b)
+  ))
   
   (damp.ekeko/ekeko*
      [a b c]
