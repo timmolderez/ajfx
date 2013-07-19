@@ -4,7 +4,7 @@
   ajfx.core
   (:refer-clojure :exclude [== type declare class])
   (:require [clojure.core.logic :as l] )
-  (:require clojure.inspector)
+  (:use [clojure.inspector])
   (:use [damp.ekeko logic])
   (:use [damp.ekeko])
   (:require 
@@ -43,61 +43,6 @@
     (soot|unit|invocation ?unit)
     (equals ?value (.getInvokeExpr ?unit)
               )))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Go fetch the container in an inlineAccessFieldSet unit (i.e. the foo in foo.bar=baz;)
-(defn-
-  fieldAssignmentUnit-fieldContainer
-  [?val ?unit ]
-  (l/fresh [?meth  ?methodName ?split]
-    (soot|value|invocation-soot|method ?unit ?meth)
-    
-    
-    (soot|method-name ?meth ?methodName)
-    (equals ?split (clojure.string/split ?methodName #"\$")) 
-    (equals "ajc" (nth ?split 0))
-    (equals "inlineAccessFieldSet" (nth ?split 1) )
-    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))
-              ))
-
-(defn
-  methodCall-receiver
-  [?val ?unit]
-  (l/fresh [?meth  ?methodName ?split]
-    (soot|value|invocation-soot|method ?unit ?meth)
-    (soot|method-name ?meth ?methodName)
-    (equals ?split (clojure.string/split ?methodName #"\$")) 
-    (equals "ajc" (nth ?split 0))
-    (equals "inlineAccessMethod" (nth ?split 1) )
-    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))
-           ))
-
-(defn
-  virtMethodCall-receiver
-  [?val ?unit]
-  (l/fresh [?adv]
-    (advice-soot|unit ?adv ?unit)
-    (jsoot/soot-unit :JInvokeStmt ?unit)
-    (equals ?val (?unit .getInvokeExpr))
-    ;(soot|unit|invocation ?unit)
-    ;(equals c (.toString b))
-           ))
-
-(clojure.inspector/inspect-tree (damp.ekeko/ekeko
-  [a b]
-  (virtMethodCall-receiver a b)
-  ))
-
-
-
-(clojure.inspector/inspect-tree (damp.ekeko/ekeko
-  [a b ]
-  (l/all 
-    (virtMethodCall-receiver a b)
-  )))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn
   soot|value|invocation-soot|method
@@ -186,6 +131,45 @@
            (equals ?mType (.getType(.getDeclaringClass ?sootMethod)))
            (equals ?mType (.getParameterType ?ajcMethod 0))))
 
+; Go fetch the container in an inlineAccessFieldSet unit (i.e. the foo in foo.bar=baz;)
+(defn
+  fieldAssignmentUnit-fieldContainer
+  [?val ?unit ]
+  (l/fresh [?meth  ?methodName ?split]
+    (soot|value|invocation-soot|method ?unit ?meth)
+    
+    
+    (soot|method-name ?meth ?methodName)
+    (equals ?split (clojure.string/split ?methodName #"\$")) 
+    (equals "ajc" (nth ?split 0))
+    (equals "inlineAccessFieldSet" (nth ?split 1) )
+    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))
+              ))
+
+
+(defn
+  methodCall-receiver
+  [?val ?unit]
+  (l/fresh [?meth  ?methodName ?split]
+    (soot|value|invocation-soot|method ?unit ?meth)
+    (soot|method-name ?meth ?methodName)
+    (equals ?split (clojure.string/split ?methodName #"\$")) 
+    (equals "ajc" (nth ?split 0))
+    (equals "inlineAccessMethod" (nth ?split 1) )
+    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))
+           ))
+
+(defn
+  virtMethodCall-receiver
+  [?val ?unit]
+  (l/fresh [?adv ?expr]
+    (advice-soot|unit ?adv ?unit)
+    (jsoot/soot-unit :JInvokeStmt ?unit)
+    (equals ?expr (.getInvokeExpr ?unit))
+    (equals "JVirtualInvokeExpr" (.getSimpleName(.getClass ?expr)))
+    (equals ?val (.getBase ?expr))
+           ))
+
 (defn 
   advice|field|get-soot|field
   [?advice ?field]
@@ -215,6 +199,40 @@
                      (jsoot/soot|unit|writes-soot|field ?unit ?field)])))
 
 (defn 
+  adviceFieldSet-container-field
+  [?advice ?container ?field]
+  "Relates an advice to its field assignment statements
+@param ?advice BcelAdvice      the advice
+@param ?container JimpleLocal  the instance of which the field is modified
+@param ?field SootField        the field being modified"       
+  (l/fresh [?setMethod ?value ?unit]
+           (w/advice ?advice)
+           (advice-soot|unit ?advice ?unit)
+           (l/conde [
+                     ; In case of an inlineAccessFieldSet
+                     (soot|unit|invocation-soot|value|invocation ?unit ?value)
+                     (soot|value|invocation-soot|method ?value ?setMethod)
+                     (soot|method|ajcfield|set-soot|field ?setMethod ?field)
+                     ]
+                    [
+                     ; A regular field assignment
+                     (jsoot/soot|unit|writes-soot|field ?unit ?field)
+                     ])
+           (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
+
+(inspect-tree (damp.ekeko/ekeko
+         [b a]
+         (advice-soot|unit a b)
+         (jsoot/soot-unit :JAssignStmt b)
+         ))
+
+
+(inspect-tree (damp.ekeko/ekeko
+         [a]
+         (w/shadow a)
+         ))
+
+(defn 
   advice|methodCall-soot|method
   [?advice ?method]
   "Relates an advice to the fields it modifies (directly in the advice body)"
@@ -227,6 +245,7 @@
                      (soot|method|ajccall-soot|method ?ajcCall ?method)]
                     [
                      (jsoot/soot-unit-calls-method ?unit ?method)])))
+
 
 (defn inferAdviceFrame
   [advice]
@@ -245,13 +264,15 @@ For example, the function could return a list like this:
                     (advice|field|set-soot|field advice ?field)
                     ))
 
-
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (comment
+  
+  (defn inferAdviceFrame
+  [advice]
+  (damp.ekeko/ekeko [?field]
+                    (advice|field|set-soot|field advice ?field)
+                    ))
   
   (clojure.inspector/inspect-tree (damp.ekeko/ekeko
   [a b]

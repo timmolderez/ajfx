@@ -70,3 +70,16 @@
 (damp.ekeko/ekeko* [?adv ?field ?type]
                    (advice|fieldWrite-soot|field ?adv ?field)
                     (equals ?type (.getClass ?field)))
+
+
+(clojure.inspector/inspect-tree (damp.ekeko/ekeko
+  [a b]
+  (virtMethodCall-receiver a b)
+  ))
+
+
+(clojure.inspector/inspect-tree (damp.ekeko/ekeko
+  [a b ]
+  (l/all 
+    (virtMethodCall-receiver a b)
+  )))
