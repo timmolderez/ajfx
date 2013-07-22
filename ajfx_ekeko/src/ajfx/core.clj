@@ -53,7 +53,6 @@
            (equals ?method (.getMethod ?value))
     ))
 
-
 (defn-
   soot|method|static
   "Is this soot method static?"
@@ -185,20 +184,6 @@
                      (jsoot/soot|unit|reads-soot|field ?unit ?field)])))
 
 (defn 
-  advice|field|set-soot|field
-  [?advice ?field]
-  "Relates an advice to the fields it modifies (directly in the advice body)"
-  (l/fresh [?setMethod ?value ?unit]
-           (w/advice ?advice)
-           (advice-soot|unit ?advice ?unit)
-           (l/conde [
-                     (soot|unit|invocation-soot|value|invocation ?unit ?value)
-                     (soot|value|invocation-soot|method ?value ?setMethod)
-                     (soot|method|ajcfield|set-soot|field ?setMethod ?field)]
-                    [
-                     (jsoot/soot|unit|writes-soot|field ?unit ?field)])))
-
-(defn 
   adviceFieldSet-container-field
   [?advice ?container ?field]
   "Relates an advice to its field assignment statements
@@ -220,22 +205,25 @@
                      ])
            (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
 
-(inspect-tree (damp.ekeko/ekeko
-         [b a]
-         (advice-soot|unit a b)
-         (jsoot/soot-unit :JAssignStmt b)
-         ))
+(defn 
+  methodFieldSet-container-field
+  [?method ?container ?field]
+  "Relates a method to any field assignments in its body 
+@param ?advice SootMethod      the method
+@param ?container JimpleLocal  the instance of which the field is modified
+@param ?field SootField        the field being modified"       
+  (l/fresh [?unit]
+           (jsoot/soot|method-soot|unit ?method ?unit)
+           (jsoot/soot|unit|writes-soot|field ?unit ?field)
+                     
+           (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
 
-
-(inspect-tree (damp.ekeko/ekeko
-         [a]
-         (w/shadow a)
-         ))
+(inspect-tree(damp.ekeko/ekeko [ a b c] (methodFieldSet-container-field a b c)))
 
 (defn 
   advice|methodCall-soot|method
-  [?advice ?method]
-  "Relates an advice to the fields it modifies (directly in the advice body)"
+  [?advice ?container ?method]
+  "Relates an advice to the methods it calls (directly in the advice body)"
   (l/fresh [?ajcCall ?value ?unit]
            (w/advice ?advice)
            (advice-soot|unit ?advice ?unit)
@@ -244,8 +232,18 @@
                      (soot|value|invocation-soot|method ?value ?ajcCall)
                      (soot|method|ajccall-soot|method ?ajcCall ?method)]
                     [
-                     (jsoot/soot-unit-calls-method ?unit ?method)])))
+                     (jsoot/soot-unit-calls-method ?unit ?method)])
+           (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
 
+
+(defn 
+  method-methodCalls
+  [?advice ?container ?method]
+  "Relates a method to the method calls it contains"
+  (l/fresh [?unit]
+           (jsoot/soot|method-soot|unit ?method ?unit)
+           (jsoot/soot-unit-calls-method ?unit ?method)
+           (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
 
 (defn inferAdviceFrame
   [advice]
@@ -258,11 +256,23 @@ For example, the function could return a list like this:
   [aTruck, SootField<cargo>, SootField<contents>],      ; aTruck.cargo.contents
   [this, SootField<cargo>]                              ; this.cargo
 ]
-
 "
-  (damp.ekeko/ekeko [?field]
-                    (advice|field|set-soot|field advice ?field)
-                    ))
+  (let 
+    [directWrites (damp.ekeko/ekeko [?container ?field]
+                    (adviceFieldSet-container-field advice ?container ?field))
+     directCalls (damp.ekeko/ekeko [?container ?method]
+                    (advice|methodCall-soot|method advice ?container ?method))]
+    directCalls))
+
+(inspect-tree(let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
+     (inferAdviceFrame (first(first allAdvice)))))
+
+(inspect-tree 
+  (damp.ekeko/ekeko
+    [b]
+    (l/fresh [a]
+             (jsoot/soot|method-soot|unit a b)
+             (soot|method-name a "helperMethod"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -274,7 +284,7 @@ For example, the function could return a list like this:
                     (advice|field|set-soot|field advice ?field)
                     ))
   
-  (clojure.inspector/inspect-tree (damp.ekeko/ekeko
+  (inspect-tree (damp.ekeko/ekeko
   [a b]
   (fieldAssignmentUnit-fieldContainer a b)
   ))
@@ -297,12 +307,6 @@ For example, the function could return a list like this:
   
   
 (let [x [1 2 3]]
-  (l/run* [q]
-      (l/membero q x)
-      (l/membero q [2 3 4])))
-
-(defn test2
-  [x]
   (l/run* [q]
       (l/membero q x)
       (l/membero q [2 3 4])))
