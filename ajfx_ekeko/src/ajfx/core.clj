@@ -245,24 +245,47 @@
            (jsoot/soot-unit-calls-method ?unit ?method)
            (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
 
-(defn inferAdviceFrame
-  [advice]
-  "Infer the frame condition of an advice.
-@param advice the advice we want to analyse (obtain via w/advice)
+(defn varType
+  [?var ?method ?keyword]
+  "Determine what kind of variable a JimpleLocal is (:local, :global, :variable or :this)"
+  ;(jsoot/soot|method-soot|unit ?method)
+  
+  )
+
+(defn inferMethodFrame
+  [method]
+  "Infer the frame condition of a method.
+@param method the SootMethod we want to analyse
 @return the frame condition is a list of variables that might change, such that this list can be understood by the advice itself
 For example, the function could return a list like this:
 [
   [aCar, SootField<wheel>],                             ; refers to aCar.wheel , where aCar is a parameter of the advice
   [aTruck, SootField<cargo>, SootField<contents>],      ; aTruck.cargo.contents
   [this, SootField<cargo>]                              ; this.cargo
-]
-"
+]"
+    (let 
+    [directWrites (damp.ekeko/ekeko [?container ?field]
+                    (methodFieldSet-container-field method ?container ?field))
+     directCalls (damp.ekeko/ekeko [?container ?method]
+                    (method-methodCalls method ?container ?method))]
+    directWrites))
+
+(defn inferAdviceFrame
+  [advice]
+  "Infer the frame condition of an advice.
+@param advice the advice we want to analyse (can be obtained via w/advice)
+@return the frame condition is a list of variables that might change
+@see inferMethodFrame"
   (let 
     [directWrites (damp.ekeko/ekeko [?container ?field]
                     (adviceFieldSet-container-field advice ?container ?field))
      directCalls (damp.ekeko/ekeko [?container ?method]
-                    (advice|methodCall-soot|method advice ?container ?method))]
-    directCalls))
+                    (advice|methodCall-soot|method advice ?container ?method))
+     indirectWrites (for [x directCalls]
+                      (inferMethodFrame (nth x 1)))]
+    indirectWrites))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (inspect-tree(let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
      (inferAdviceFrame (first(first allAdvice)))))
@@ -274,7 +297,22 @@ For example, the function could return a list like this:
              (jsoot/soot|method-soot|unit a b)
              (soot|method-name a "helperMethod"))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(inspect-tree 
+     (damp.ekeko/ekeko [?a ?b ?c ?d]
+                       (l/fresh []
+                       (virtMethodCall-receiver ?a ?b)
+                       (jsoot/soot|method-soot|unit ?c ?b)
+                       (jsoot/soot-method-units ?c ?d)
+                       ;(equals ?d (.getSignature ?c)
+                               )))
+
+(inspect-tree 
+     (damp.ekeko/ekeko [?b ?c ?d]
+                       (l/fresh [?a]
+                       (advice-soot|unit ?a ?b)
+                       (equals ?c (.getUseBoxes ?b))
+                       (equals ?d (type ?b))
+                               )))
 
 (comment
   
