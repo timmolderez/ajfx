@@ -27,7 +27,7 @@
            (ajsoot/advice-soot|method ?advice ?method)
            (jsoot/soot|method-soot|unit ?method ?unit)))
 
-(defn-
+(defn
   soot|unit|invocation
   "Is ?unit a JInvokeStmt?"
   [?unit]
@@ -187,6 +187,7 @@
   adviceFieldSet-container-field
   [?advice ?container ?field]
   "Relates an advice to its field assignment statements
+TODO if assignment to static field, set the container field to the class name 
 @param ?advice BcelAdvice      the advice
 @param ?container JimpleLocal  the instance of which the field is modified
 @param ?field SootField        the field being modified"       
@@ -210,15 +211,13 @@
   [?method ?container ?field]
   "Relates a method to any field assignments in its body 
 @param ?advice SootMethod      the method
-@param ?container JimpleLocal  the instance of which the field is modified
+@param ?container JimpleLocal  the instance of which the field is modified 
 @param ?field SootField        the field being modified"       
   (l/fresh [?unit]
            (jsoot/soot|method-soot|unit ?method ?unit)
            (jsoot/soot|unit|writes-soot|field ?unit ?field)
                      
            (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
-
-(inspect-tree(damp.ekeko/ekeko [ a b c] (methodFieldSet-container-field a b c)))
 
 (defn 
   advice|methodCall-soot|method
@@ -246,11 +245,33 @@
            (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
 
 (defn varType
-  [?var ?method ?keyword]
-  "Determine what kind of variable a JimpleLocal is (:local, :global, :variable or :this)"
+  [?var ?method ?kind]
+  "Determine what kind of a variable ?var is
+@param ?var    the variable
+@param ?method the variable must appear within this method body (SootMethod)
+@param ?kind   a keyword representing the variable's kind (:local, :global, :parameter or :this)"
+  (l/fresh [?unit ?lhs]
+    (l/conde [
+              (jsoot/soot|method-soot|unit ?method ?unit)
+              (jsoot/soot-unit :JIdentityStmt ?unit)
+              (= (.getName ?var) (.getName (.getLeftOp ?unit)))
+              (l/conde [
+                        (= "soot.jimple.ThisRef" (type (.getRightOp ?unit)))
+                        (equals ?kind :this)]
+                       [
+                        (= "soot.jimple.ParameterRef" (type (.getRightOp ?unit)))
+                        (equals ?kind :parameter)]
+                       [
+                        (equals ?kind :local)])
+              ]
+             [
+              (equals ?kind :global)])
+    
+    
   ;(jsoot/soot|method-soot|unit ?method)
   
   )
+)
 
 (defn inferMethodFrame
   [method]
@@ -270,6 +291,16 @@ For example, the function could return a list like this:
                     (method-methodCalls method ?container ?method))]
     directWrites))
 
+
+(defn pullUpFrame
+  "Suppose we wish to infer the frame condition of a method A, and its body contains
+a call to method B. We've inferred the frame condition of B, but we still need to rephrase it
+so it can be added to A's frame condition, which is what this function does. In other words, 
+this function 'pulls up' the frame
+condition of B to A."
+  [call ]
+  )
+
 (defn inferAdviceFrame
   [advice]
   "Infer the frame condition of an advice.
@@ -286,6 +317,7 @@ For example, the function could return a list like this:
     indirectWrites))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 (inspect-tree(let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
      (inferAdviceFrame (first(first allAdvice)))))
@@ -307,15 +339,17 @@ For example, the function could return a list like this:
                                )))
 
 (inspect-tree 
-     (damp.ekeko/ekeko [?b ?c ?d]
+     (damp.ekeko/ekeko [?b ?c ?d ?e]
                        (l/fresh [?a]
                        (advice-soot|unit ?a ?b)
                        (equals ?c (.getUseBoxes ?b))
                        (equals ?d (type ?b))
+                       (jsoot/soot-unit :JIdentityStmt ?b)
+                       (equals ?e (.getLeftOp ?b))
                                )))
 
+
 (comment
-  
   (defn inferAdviceFrame
   [advice]
   (damp.ekeko/ekeko [?field]
