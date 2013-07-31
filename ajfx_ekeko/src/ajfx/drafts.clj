@@ -1,8 +1,30 @@
-(ns ajfx.drafts)
 
+(ns 
+  ^{:doc "Helper functions."
+    :author "Tim Molderez" }
+  ajfx.drafts
+  (:refer-clojure :exclude [== type declare class])
+  (:require [clojure.core.logic :as l] )
+  (:use [clojure.inspector])
+  (:use [damp.ekeko logic])
+  (:use [damp.ekeko])
+  (:require 
+    [damp.ekeko.aspectj
+     [weaverworld :as w]
+     [soot :as ajsoot]
+            ;[ajdt :as ajdt] 
+             ;[xcut :as xcut]
+            ]
+    [damp.ekeko.soot
+     [soot :as jsoot]])
+  (:import 
+    [java.lang System]))
+
+(defn bla []
+  2)
  
   
-  
+(comment 
 (defn 
   soot|unit|ajcwrites-soot|field
   [?unit ?field]
@@ -75,3 +97,4 @@
   (damp.ekeko/ekeko
     [a b]
     (advice|methodCall-soot|method a b)))
+)

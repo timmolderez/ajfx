@@ -7,6 +7,7 @@
   (:use [clojure.inspector])
   (:use [damp.ekeko logic])
   (:use [damp.ekeko])
+  (:use [ajfx.soot-ext])
   (:require 
     [damp.ekeko.aspectj
      [weaverworld :as w]
@@ -221,57 +222,52 @@ TODO if assignment to static field, set the container field to the class name
 
 (defn 
   advice|methodCall-soot|method
-  [?advice ?container ?method]
+  [?caller ?callee ?call ?receiver]
   "Relates an advice to the methods it calls (directly in the advice body)"
   (l/fresh [?ajcCall ?value ?unit]
-           (w/advice ?advice)
-           (advice-soot|unit ?advice ?unit)
+           (w/advice ?caller)
+           (advice-soot|unit ?caller ?call)
            (l/conde [
-                     (soot|unit|invocation-soot|value|invocation ?unit ?value)
+                     (soot|unit|invocation-soot|value|invocation ?call ?value)
                      (soot|value|invocation-soot|method ?value ?ajcCall)
-                     (soot|method|ajccall-soot|method ?ajcCall ?method)]
+                     (soot|method|ajccall-soot|method ?ajcCall ?callee)]
                     [
-                     (jsoot/soot-unit-calls-method ?unit ?method)])
-           (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
+                     (jsoot/soot-unit-calls-method ?call ?callee)])
+           (equals ?receiver (.getValue(first (.getUseBoxes ?call))))))
 
 
 (defn 
   method-methodCalls
-  [?advice ?container ?method]
+  [?caller ?callee ?call ?receiver]
   "Relates a method to the method calls it contains"
-  (l/fresh [?unit]
-           (jsoot/soot|method-soot|unit ?method ?unit)
-           (jsoot/soot-unit-calls-method ?unit ?method)
-           (equals ?container (.getValue(first (.getUseBoxes ?unit))))))
+  (l/fresh []
+           (jsoot/soot|method-soot|unit ?caller ?call)
+           (jsoot/soot-unit-calls-method ?call ?callee)
+           (equals ?receiver (.getValue(first (.getUseBoxes ?call))))))
 
 (defn varType
-  [?var ?method ?kind]
+  [?var ?method]
   "Determine what kind of a variable ?var is
-@param ?var    the variable
+@param ?var    the variable (JimpleLocal)
 @param ?method the variable must appear within this method body (SootMethod)
-@param ?kind   a keyword representing the variable's kind (:local, :global, :parameter or :this)"
-  (l/fresh [?unit ?lhs]
-    (l/conde [
-              (jsoot/soot|method-soot|unit ?method ?unit)
-              (jsoot/soot-unit :JIdentityStmt ?unit)
-              (= (.getName ?var) (.getName (.getLeftOp ?unit)))
-              (l/conde [
-                        (= "soot.jimple.ThisRef" (type (.getRightOp ?unit)))
-                        (equals ?kind :this)]
-                       [
-                        (= "soot.jimple.ParameterRef" (type (.getRightOp ?unit)))
-                        (equals ?kind :parameter)]
-                       [
-                        (equals ?kind :local)])
-              ]
-             [
-              (equals ?kind :global)])
-    
-    
-  ;(jsoot/soot|method-soot|unit ?method)
-  
-  )
-)
+@return a keyword representing the variable's kind (:local, :global, :parameter or :this)"
+  (first (ekeko [?kind]
+    (l/fresh [?unit ?lhs]
+      (l/conde [
+                (jsoot/soot|method-soot|unit ?method ?unit)
+                (jsoot/soot-unit :JIdentityStmt ?unit)
+                (= (.getName ?var) (.getName (.getLeftOp ?unit)))
+                (l/conde [
+                          (= "soot.jimple.ThisRef" (.getClass (.getRightOp ?unit)))
+                          (equals ?kind :this)]
+                         [
+                          (= "soot.jimple.ParameterRef" (.getClass (.getRightOp ?unit)))
+                          (equals ?kind :parameter)]
+                         [
+                          (equals ?kind :local)])
+                ]
+               [
+                (equals ?kind :global)])))))
 
 (defn inferMethodFrame
   [method]
@@ -285,21 +281,63 @@ For example, the function could return a list like this:
   [this, SootField<cargo>]                              ; this.cargo
 ]"
     (let 
-    [directWrites (damp.ekeko/ekeko [?container ?field]
+    [directWrites (ekeko [?container ?field]
                     (methodFieldSet-container-field method ?container ?field))
-     directCalls (damp.ekeko/ekeko [?container ?method]
+     directCalls (ekeko [?container ?method]
                     (method-methodCalls method ?container ?method))]
     directWrites))
 
+(defn get-class-name
+  "Retrieve the (absolute) class name of an object
+@param obj  a Java object
+@return     absolute class name"
+  [obj]
+  (.getName (.getClass obj)))
+
+
+(defn jimpleLocal-parameterIndex
+  "Relate the use of a parameter within a method to its index
+@param ?local    a JimpleLocal representing a parameter
+@param ?method   the JimpleLocal is used within this method
+@param ?index    the index of the parameter within the method's interface"
+  [?local ?method ?index]
+  (l/fresh [?unit]
+           (jsoot/soot|method-soot|unit ?method ?unit)
+           (jsoot/soot-unit :JIdentityStmt ?unit)
+           (equals ?local (.getName (.getLeftOp ?unit)))     
+           (equals "soot.jimple.ParameterRef" (get-class-name (.getRightOp ?unit)))
+           (equals ?index (.getIndex(.getRightOp ?unit)))
+      ))
 
 (defn pullUpFrame
-  "Suppose we wish to infer the frame condition of a method A, and its body contains
-a call to method B. We've inferred the frame condition of B, but we still need to rephrase it
+  "Suppose we wish to infer the frame condition of a method a(), and its body contains
+a call to method b(). We've inferred the frame condition of B, but we still need to rephrase it
 so it can be added to A's frame condition, which is what this function does. In other words, 
 this function 'pulls up' the frame
-condition of B to A."
-  [call ]
+condition of b() to a().
+@param call  the call to b() from a() 
+@param body  the method body of b()
+@param frame the frame axiom of b()
+@return  the frame of b() pulled up to the context of a()"
+  [call body frame]
+  (for [x frame]
+    (let [container (nth frame 0)]
+      (case (varType container body)
+        :local ()
+        :global ()
+        :param (
+                 (jimpleLocal-parameterIndex container )
+                 )
+        :this()))))
+
+
+
+(defn internalLocal-sourceValue
+  "Relate a local that was generated by Jimple to the value that it represents in the Java source code"
+  []
   )
+  
+  
 
 (defn inferAdviceFrame
   [advice]
@@ -308,29 +346,71 @@ condition of B to A."
 @return the frame condition is a list of variables that might change
 @see inferMethodFrame"
   (let 
-    [directWrites (damp.ekeko/ekeko [?container ?field]
+    [directWrites (ekeko [?container ?field]
                     (adviceFieldSet-container-field advice ?container ?field))
-     directCalls (damp.ekeko/ekeko [?container ?method]
-                    (advice|methodCall-soot|method advice ?container ?method))
-     indirectWrites (for [x directCalls]
-                      (inferMethodFrame (nth x 1)))]
-    indirectWrites))
+     directCalls (ekeko [?callee ?call ?receiver]
+                    (advice|methodCall-soot|method advice ?callee ?call ?receiver))
+     callFrames (for [x directCalls]
+                      (inferMethodFrame (nth x 1)))
+     pulledUpWrites (map pullUpFrame
+                         (for [x directCalls] (nth x 2))
+                         (for [x directCalls] (nth x 1))
+                         callFrames)]
+    pulledUpWrites))
+
+
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(inspect-tree(let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
+(inspect-tree 
+  (ekeko 
+    [?a ?b ?c]
+    (jimpleLocal-parameterIndex ?a ?b ?c)
+    ))
+
+(inspect-tree 
+  (ekeko 
+    [?a ?b ?c ?d ?e]
+    (method-methodCalls ?a ?b ?c ?d)
+    (equals ?e (.getUseBoxes ?c))))
+
+(inspect-tree
+  (ekeko [?a ?b ?c]
+                    (jsoot/soot|method-soot|unit ?a ?b)
+                    (soot|method-name ?a "helperMethod")
+                    (jsoot/soot-unit-calls-method ?b ?c)
+                    ))
+
+(inspect-tree(let [allAdvice (ekeko [?advice] (w/advice ?advice))]
      (inferAdviceFrame (first(first allAdvice)))))
 
-(inspect-tree 
-  (damp.ekeko/ekeko
-    [b]
-    (l/fresh [a]
-             (jsoot/soot|method-soot|unit a b)
-             (soot|method-name a "helperMethod"))))
+; Get the units of a particular method
 
 (inspect-tree 
-     (damp.ekeko/ekeko [?a ?b ?c ?d]
+  (ekeko
+    [?b ?c]
+    (l/fresh [?a]
+             (jsoot/soot|method-soot|unit ?a ?b)
+             (soot|method-name ?a "helperMethod")
+             (equals ?c (.toString ?b))
+             )))
+
+(inspect-tree 
+  (ekeko
+    [?b ?c]
+    (l/fresh [?a]
+             (jsoot/soot|method-soot|unit ?a ?b)
+             (jsoot/soot-unit :JAssignStmt ?b)
+             (soot|method-name ?a "start")
+             (equals ?c (.getLeftOp ?b))
+             )))
+
+(inspect-tree 
+     (ekeko [?a ?b ?c ?d]
                        (l/fresh []
                        (virtMethodCall-receiver ?a ?b)
                        (jsoot/soot|method-soot|unit ?c ?b)
@@ -339,7 +419,7 @@ condition of B to A."
                                )))
 
 (inspect-tree 
-     (damp.ekeko/ekeko [?b ?c ?d ?e]
+     (ekeko [?b ?c ?d ?e]
                        (l/fresh [?a]
                        (advice-soot|unit ?a ?b)
                        (equals ?c (.getUseBoxes ?b))
@@ -347,71 +427,3 @@ condition of B to A."
                        (jsoot/soot-unit :JIdentityStmt ?b)
                        (equals ?e (.getLeftOp ?b))
                                )))
-
-
-(comment
-  (defn inferAdviceFrame
-  [advice]
-  (damp.ekeko/ekeko [?field]
-                    (advice|field|set-soot|field advice ?field)
-                    ))
-  
-  (inspect-tree (damp.ekeko/ekeko
-  [a b]
-  (fieldAssignmentUnit-fieldContainer a b)
-  ))
-  
-  (damp.ekeko/ekeko*
-     [a b c]
-     (advice-soot|unit a b)
-     (jsoot/soot-unit c b))
-  
-  ; Using inferAdviceFrame
-  (let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
-     (.getClass (first allAdvice)))
-  
-  (let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
-     (inferAdviceFrame (first(first allAdvice))))
-  
-  (let [allAdvice (damp.ekeko/ekeko [?advice] (w/advice ?advice))]
-     (map first allAdvice))
-  
-  
-  
-(let [x [1 2 3]]
-  (l/run* [q]
-      (l/membero q x)
-      (l/membero q [2 3 4])))
-
-(defn 
-  soot-unit-calls-method2
-  [?unit ?m] 
-  (l/fresh [?model ?keyw ?scene ?methods]
-         (jsoot/soot-model-scene ?model ?scene)
-         (jsoot/soot-unit ?keyw ?unit)
-         (equals ?methods (iterator-seq (.dynamicUnitCallees ^SootProjectModel ?model ?unit)))
-         (contains ?methods ?m)
-         (jsoot/soot :method ?m) ;application methods only
-         ))
-
-(defn 
-  advice|methodCall-soot|method
-  [?advice ?method ?method2]
-  (l/fresh [?unit ]
-           ;(advice-soot|unit ?advice ?unit)
-           (ajsoot/advice-soot|method ?advice ?method2)
-           (jsoot/soot|method-soot|unit ?method2 ?unit)
-           (jsoot/soot-unit-calls-method ?unit ?method)
-           ;(equals ?u1 (.hashCode ?unit))
-           ;(equals ?u2 (.hashCode ?unit1))
-           ;(equals ?u1 ?u2)
-           ))
-
-(defn 
-  advice|methodCall-soot|method
-  [?advice ?method]
-  (l/fresh [?unit ?advAsMethod]
-           (ajsoot/advice-soot|method ?advice ?advAsMethod)
-           (jsoot/soot-method-called-by-method ?method ?advAsMethod)))
-
-)
