@@ -7,7 +7,6 @@
   (:use [clojure.inspector])
   (:use [damp.ekeko logic])
   (:use [damp.ekeko])
-  (:use [ajfx.soot-ext])
   (:require 
     [damp.ekeko.aspectj
      [weaverworld :as w]
@@ -294,6 +293,11 @@ For example, the function could return a list like this:
   [obj]
   (.getName (.getClass obj)))
 
+(defn jimpleLocal-parameterIndex-fun
+  [local method]
+  (damp.ekeko/ekeko
+    [?index]
+    (jimpleLocal-parameterIndex local method ?index)))
 
 (defn jimpleLocal-parameterIndex
   "Relate the use of a parameter within a method to its index
@@ -309,6 +313,14 @@ For example, the function could return a list like this:
            (equals ?index (.getIndex(.getRightOp ?unit)))
       ))
 
+(defn virtualInvoke-parameter
+  "Retrieve the nth parameter from an invoke statement / method call
+@param invoke  a JInvokeStmt
+@param n       parameter index
+@return        the requested parameter, usually a JimpleLocal"
+  [invoke n]
+  (nth (.getUseBoxes invoke) n))
+
 (defn pullUpFrame
   "Suppose we wish to infer the frame condition of a method a(), and its body contains
 a call to method b(). We've inferred the frame condition of B, but we still need to rephrase it
@@ -323,12 +335,18 @@ condition of b() to a().
   (for [x frame]
     (let [container (nth frame 0)]
       (case (varType container body)
-        :local ()
-        :global ()
-        :param (
-                 (jimpleLocal-parameterIndex container )
+        :local ( ; We can ignore these; we don't care for local changes unless they're an alias
+                 ; of something that is publicly visible.. (which should've already been taken care of..)
                  )
-        :this()))))
+        :global ( ; No need to change anything..
+                  frame)
+        :param ( ; Map the formal parameter back to an actual parameter
+                 (let 
+                   [index (jimpleLocal-parameterIndex-fun container body )
+                    actualParam (virtualInvoke-parameter call index)]
+                   actualParam)
+        :this( ; Replace this with the method call's receiver
+               ))))))
 
 
 
@@ -369,7 +387,7 @@ condition of b() to a().
 (inspect-tree 
   (ekeko 
     [?a ?b ?c]
-    (jimpleLocal-parameterIndex ?a ?b ?c)
+    (virtualInvoke-parameter ?a ?b ?c)
     ))
 
 (inspect-tree 
