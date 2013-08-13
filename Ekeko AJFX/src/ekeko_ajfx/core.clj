@@ -12,7 +12,10 @@
   (:use [inspector-jay.core]
         [clojure.repl]
         [damp.ekeko logic]
-        [damp.ekeko]))
+        [damp.ekeko])
+  (:import [soot.jimple IdentityStmt]
+    [soot.jimple.internal JimpleLocal]
+    [soot.jimple ThisRef ParameterRef]))
 
 (defn get-class-name
   "Retrieve the (absolute) class name of an object
@@ -273,6 +276,30 @@ TODO if assignment to static field, set the container field to the class name
                [
                 (equals ?kind :global)])))))
 
+
+(defn varType-recursive
+  [var unitChain]
+  (let [unit (first unitChain)
+        varName (-> var .getName)
+        unitRest (rest unitChain)]
+    (if (instance? IdentityStmt unit)
+      (if (= varName (-> unit .getLeftOp .getName))
+        (cond (instance? ThisRef (-> unit .getRightOp)) :this
+          (instance? ParameterRef (-> unit .getRightOp)) :parameter)
+        (if (not-empty unitRest)
+          (varType-recursive var unitRest)
+          :local))
+      :local)))
+
+(defn varType3
+  [var method]
+  (let [units (-> method .getActiveBody .getUnits)]
+    (if (instance? JimpleLocal var)
+      (varType-recursive var units)
+      :global)))
+
+;((fn ! [n] (if (= 1 n) 1 (* n (! (dec n))))) 5)
+
 (defn varType2
   "Determine what kind of a variable ?var is
 @param ?var    the variable (JimpleLocal)
@@ -402,9 +429,8 @@ condition of b() to a().
                    actualParam)
         :this 7 ; Replace this with the method call's receiver
                ))
-      (damp.ekeko/ekeko [?kind ?c]
-                        (varType2 container body ?kind ?c))
-      )))
+      (varType3 container body))
+      ))
 
 
 (defn internalLocal-sourceValue
@@ -431,7 +457,7 @@ condition of b() to a().
                          (for [x directCalls] (nth x 1))
                          (for [x directCalls] (nth x 0))
                          callFrames)]
-    callFrames))
+    pulledUpWrites))
 
 
 
@@ -473,8 +499,8 @@ condition of b() to a().
 
 (inspect 
   (ekeko
-    [?b ?c]
-    (l/fresh [?a]
+    [?a ?b ?c]
+    (l/fresh []
              (jsoot/soot|method-soot|unit ?a ?b)
              (soot|method-name ?a "helperMethod")
              (equals ?c (.toString ?b))
