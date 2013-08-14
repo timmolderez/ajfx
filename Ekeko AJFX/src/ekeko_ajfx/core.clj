@@ -248,35 +248,6 @@ TODO if assignment to static field, set the container field to the class name
            (equals ?receiver (.getValue(first (.getUseBoxes ?call))))
            ))
 
-(defn varType
-  [?var ?method]
-  "Determine what kind of a variable ?var is
-@param ?var    the variable (JimpleLocal)
-@param ?method the variable must appear within this method body (SootMethod)
-@return a keyword representing the variable's kind (:local, :global, :parameter or :this)"
-  (first (ekeko [?kind]
-    (l/fresh [?unit ?lhs ?varname]
-      (l/conde [
-                (equals ?kind :local)
-       ;         (jsoot/soot|method-soot|unit ?method ?unit)
-                (jsoot/soot-unit :JIdentityStmt ?unit)
-       ;         (equals "soot.internal.jimple.JimpleLocal" (get-class-name ?var))
-       ;         (equals ?varname (.getName ?var))
-       ;         (equals ?varname (.getName (.getLeftOp ?unit)))
-                
-        ;        (l/conde [
-         ;                 (equals "soot.jimple.ThisRef" (get-class-name (.getRightOp ?unit)))
-          ;                (equals ?kind :this)]
-           ;              [
-            ;              (equals "soot.jimple.ParameterRef" (get-class-name (.getRightOp ?unit)))
-             ;             (equals ?kind :parameter)]
-              ;           [
-               ;           (equals ?kind :local)])
-                ]
-               [
-                (equals ?kind :global)])))))
-
-
 (defn varType-recursive
   [var unitChain]
   (let [unit (first unitChain)
@@ -291,69 +262,13 @@ TODO if assignment to static field, set the container field to the class name
           :local))
       :local)))
 
-(defn varType3
+(defn varType
   [var method]
+  "Determine what kind of variable var is, given that it appears in the body of method."
   (let [units (-> method .getActiveBody .getUnits)]
     (if (instance? JimpleLocal var)
       (varType-recursive var units)
       :global)))
-
-;((fn ! [n] (if (= 1 n) 1 (* n (! (dec n))))) 5)
-
-(defn varType2
-  "Determine what kind of a variable ?var is
-@param ?var    the variable (JimpleLocal)
-@param ?method the variable must appear within this method body (SootMethod)
-@return a keyword representing the variable's kind (:local, :global, :parameter or :this)"
-[?var ?method ?kind ?c]
-    (l/fresh [?unit ?lhs ?varname]
-      (l/conde [
-                (jsoot/soot|method-soot|unit ?method ?unit)
-                (jsoot/soot-unit :JIdentityStmt ?unit)
-                (equals "soot.jimple.internal.JimpleLocal" (get-class-name ?var))
-                (equals ?varname (.getName ?var))
-                (equals ?varname (.getName (.getLeftOp ?unit)))
-                (equals ?c (get-class-name (.getRightOp ?unit)))
-                
-                (l/conde [
-                          (equals "soot.jimple.ThisRef" (get-class-name (.getRightOp ?unit)))
-                          (equals ?kind :this)]
-                         [
-                          (equals "soot.jimple.ParameterRef" (get-class-name (.getRightOp ?unit)))
-                          (equals ?kind :parameter)]
-                         [
-                          (equals ?kind :local)
-                          ])
-                ]
-               [
-                (equals ?kind :global)])))
-
-(inspect
-(ekeko [?kind ?var ?method ?cls]
-    (l/fresh [?unit ?lhs ?varname ?useboxes ?unit2 ?method2 ?var2]
-      (l/conde [
-                (jsoot/soot|method-soot|unit ?method2 ?unit2)
-                (equals ?useboxes (.getUseBoxes ?unit2))
-                (contains ?useboxes ?var2)
-                (equals ?var (.getValue ?var2))
-                
-                (jsoot/soot|method-soot|unit ?method ?unit)
-                (jsoot/soot-unit :JIdentityStmt ?unit)
-                (equals "soot.jimple.internal.JimpleLocal"  (get-class-name ?var))        
-                (equals ?varname (.getName (.getLeftOp ?unit)))
-                (equals ?varname (.getName ?var))
-                (l/conde [
-                          (equals "soot.jimple.ThisRef" (get-class-name (.getRightOp ?unit)))
-                          (equals ?kind :this)]
-                         [
-                          (equals "soot.jimple.ParameterRef" (get-class-name (.getRightOp ?unit)))
-                          (equals ?kind :parameter)]
-                         [
-                          (equals ?kind :local)])
-                ]
-               [
-                (equals ?kind :global)]))))
-
 
 (defn inferMethodFrame
   [method]
@@ -382,16 +297,17 @@ For example, the function could return a list like this:
   (l/fresh [?unit]
            (jsoot/soot|method-soot|unit ?method ?unit)
            (jsoot/soot-unit :JIdentityStmt ?unit)
-           (equals ?local (.getName (.getLeftOp ?unit)))     
-           (equals "soot.jimple.ParameterRef" (get-class-name (.getRightOp ?unit)))
+           (equals ?local (.getLeftOp ?unit))     
+           (equals ParameterRef (.getClass (.getRightOp ?unit)))
            (equals ?index (.getIndex(.getRightOp ?unit)))
       ))
 
 (defn jimpleLocal-parameterIndex-fun
-  [local method]
-  (damp.ekeko/ekeko
+  "Functional wrapper for jimpleLocal-parameterIndex"
+  [?local ?method]
+  (first (first (damp.ekeko/ekeko
     [?index]
-    (jimpleLocal-parameterIndex local method ?index)))
+    (jimpleLocal-parameterIndex ?local ?method ?index)))))
 
 (defn virtualInvoke-parameter
   "Retrieve the nth parameter from an invoke statement / method call
@@ -399,7 +315,7 @@ For example, the function could return a list like this:
 @param n       parameter index
 @return        the requested parameter, usually a JimpleLocal"
   [invoke n]
-  (nth (.getUseBoxes invoke) n))
+  (nth (.getUseBoxes invoke) (inc n)))
 
 (defn pullUpFrame
   "Suppose we wish to infer the frame condition of a method a(), and its body contains
@@ -413,33 +329,25 @@ condition of b() to a().
 @return  the frame of b() pulled up to the context of a()"
   [call body frame]
   (for [x frame]
-    (let [container (nth x 0)]
-      
-      (comment(case (varType container body)
-        :local 4 ; We can ignore these; we don't care for local changes unless they're an alias
-               ; of something that is publicly visible.. (which should've already been taken care of..)
+    (let [container (first x)]
+      (case (varType container body)
+        :parameter (let ; Map the formal parameter back to an actual parameter 
+                 [index (jimpleLocal-parameterIndex-fun container body )
+                  actualParam (virtualInvoke-parameter call index)]
+                 (cons actualParam (rest x)))
+        :this (cons 
+                (first (-> call .getUseBoxes)) ; Replace this with the method call's receiver 
+                (rest x)) 
+        :local :error ; Frames shouldn't contain locals
+        :global x ; No need to change anything
         
-                 
-        :global 5  ; No need to change anything..
-        
-        :param 6 ; Map the formal parameter back to an actual parameter
-                 (let 
-                   [index (jimpleLocal-parameterIndex-fun container body )
-                    actualParam (virtualInvoke-parameter call index)]
-                   actualParam)
-        :this 7 ; Replace this with the method call's receiver
-               ))
-      (varType3 container body))
-      ))
-
+               ))))
 
 (defn internalLocal-sourceValue
   "Relate a local that was generated by Jimple to the value that it represents in the Java source code"
   []
-  )
+  ) 
   
-  
-
 (defn inferAdviceFrame
   [advice]
   "Infer the frame condition of an advice.
@@ -457,7 +365,7 @@ condition of b() to a().
                          (for [x directCalls] (nth x 1))
                          (for [x directCalls] (nth x 0))
                          callFrames)]
-    pulledUpWrites))
+    directWrites))
 
 
 
