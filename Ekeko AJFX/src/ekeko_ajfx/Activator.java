@@ -1,7 +1,10 @@
 package ekeko_ajfx;
 
+import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+
+import ccw.util.osgi.ClojureOSGi;
 
 public class Activator implements BundleActivator {
 
@@ -17,6 +20,9 @@ public class Activator implements BundleActivator {
 	 */
 	public void start(BundleContext bundleContext) throws Exception {
 		Activator.context = bundleContext;
+		
+		Bundle b = bundleContext.getBundle();
+//		ClojureOSGi.require(b, "inspector-jay.core");
 	}
 
 	/*
