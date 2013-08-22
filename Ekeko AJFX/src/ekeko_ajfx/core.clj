@@ -100,9 +100,11 @@ condition of b() to a().
   [])
 
 (def inferMethodFrame
-  (memoize (fn [method] ; We can memoize here, because the frame condition of a method should always be the same..
+  (memoize (fn [method stack] ; We can memoize here, because the frame condition of a method should always be the same..
   "Infer the frame condition of a method.
 @param method the SootMethod we want to analyse
+@param stack contains the methods that have been traversed so far;
+             this is used to avoid infinite recursion when inferring the frame of a recursive method
 @return the frame condition is a list of variables that might change, such that this list can be understood by the advice itself
 For example, the function could return a list like this:
 [
@@ -110,13 +112,16 @@ For example, the function could return a list like this:
   [aTruck, SootField<cargo>, SootField<contents>],      ; aTruck.cargo.contents
   [this, SootField<cargo>]                              ; this.cargo
 ]"
-    (let 
-    [directWrites (ekeko [?container ?field]
+    (let [directWrites (ekeko [?container ?field]
                     (methodFieldSet-container-field method ?container ?field))
      directCalls (ekeko [?callee ?call ?container]
                     (method-methodCalls method ?callee ?call ?container))
      callFrames (for [x directCalls]
-                      (inferMethodFrame (nth x 0)))
+                  (if (some #{(-> x .getUseBoxes .getValue .getMethod)} stack) ; Did we already see this method?
+                    [] ; Skip recursive calls
+                    (inferMethodFrame 
+                      (nth x 0)
+                      (concat  stack))))
      pulledUpWrites (map pullUpFrame
                       (for [x directCalls] (nth x 1))
                       (for [x directCalls] (nth x 0))
@@ -137,7 +142,7 @@ For example, the function could return a list like this:
      directCalls (ekeko [?callee ?call ?receiver]
                     (advice|methodCall-soot|method advice ?callee ?call ?receiver))
      callFrames (for [x directCalls]
-                      (inferMethodFrame (nth x 0)))
+                      (inferMethodFrame (nth x 0) []))
      pulledUpWrites (map pullUpFrame
                          (for [x directCalls] (nth x 1))
                          (for [x directCalls] (nth x 0))
@@ -171,8 +176,7 @@ For example, the function could return a list like this:
   (ekeko [?a ?b ?c]
                     (jsoot/soot|method-soot|unit ?a ?b)
                     (soot|method-name ?a "helperMethod")
-                    (jsoot/soot-unit-calls-method ?b ?c)
-                    ))
+                    (jsoot/soot-unit-calls-method ?b ?c)))
 
 (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
      (inferAdviceFrame (first(first allAdvice))))

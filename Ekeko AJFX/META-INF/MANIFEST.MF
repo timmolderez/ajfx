@@ -13,6 +13,5 @@ Bundle-RequiredExecutionEnvironment: JavaSE-1.6
 Eclipse-RegisterBuddy: damp.ekeko.plugin
 Bundle-ClassPath: lib/clojure-1.5.1.jar,
  lib/core.logic-0.8.3.jar,
- lib/inspector-jay-0.1.5-standalone.jar,
  .
 

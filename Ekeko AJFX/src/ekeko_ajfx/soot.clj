@@ -231,7 +231,7 @@ TODO if assignment to static field, set the container field to the class name
            (jsoot/soot-unit-calls-method ?call ?callee)
            (equals ?receiver (.getValue(first (.getUseBoxes ?call))))
            (succeeds (instance? soot.jimple.InvokeStmt ?call))
-           (fails (equals soot.jimple.internal.JSpecialInvokeExpr (type (-> ?call .getInvokeExpr))))))
+           (fails (equals soot.jimple.internal.JSpecialInvokeExpr (-> ?call .getInvokeExpr .getClass)))))
 
 (defn 
   advice|methodCall-soot|method
