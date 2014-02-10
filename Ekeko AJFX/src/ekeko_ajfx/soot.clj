@@ -9,13 +9,56 @@
              [soot :as ajsoot]]
             [damp.ekeko.soot
              [soot :as jsoot]])
-  (:use [inspector-jay.core]
+  (:use ;[inspector-jay.core]
         [clojure.repl]
         [damp.ekeko logic]
-        [damp.ekeko])
+        [damp.ekeko]
+        [clojure.inspector :exclude [inspect]])
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
-    [soot.jimple ThisRef ParameterRef]))
+    [soot.jimple ThisRef ParameterRef]
+    [org.aspectj.lang Signature]
+    [java.lang Integer]
+    [org.eclipse.jdt.core IJavaElement ITypeHierarchy IType IPackageFragment IClassFile ICompilationUnit
+     IJavaProject WorkingCopyOwner IMethod]
+    [org.eclipse.jdt.core.dom Expression IVariableBinding ASTParser AST IBinding Type TypeDeclaration 
+     QualifiedName SimpleName ITypeBinding MethodDeclaration
+     MethodInvocation ClassInstanceCreation SuperConstructorInvocation SuperMethodInvocation
+     SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
+    [org.aspectj.weaver.patterns Pointcut AndPointcut]
+    ))
+
+(defn- 
+   lastIndexOfText 
+   [from to]  
+   (> (.lastIndexOf from to) -1))
+
+ (defn-  
+   IndexOfText  
+   [from to](> (.indexOf from to) -1))
+
+;(inspect-tree
+;(damp.ekeko/ekeko 
+;  [?a ?b]
+;  (l/fresh []
+;           (w/aspect-advice ?a ?b)
+;           (equals "bank.aspects.Security" (-> ?a .getName))
+;           (w/advice|before ?b))))
+;
+;(inspect-tree (ekeko [?a ?c] 
+;                     (w/aspect-shadow ?a ?c)))
+;
+;(inspect-tree (ekeko [?b ?a]
+;   (l/fresh []
+;       (advice-soot|unit ?a ?b))))
+
+;(inspect
+;(damp.ekeko/ekeko [?a ?b]
+;           (w/advice ?a)
+;           (ajsoot/advice-soot|method ?a ?b)))
+
+(count (ekeko [?a] (w/advice ?a)))
+
 
 (defn get-class-name
   "Retrieve the (absolute) class name of an object

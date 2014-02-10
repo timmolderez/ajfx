@@ -18,6 +18,7 @@
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]))
 
+
 (defn varType-recursive
   [var unitChain]
   (let [unit (first unitChain)
@@ -173,10 +174,10 @@ For example, the function could return a list like this:
     (equals ?e (.getUseBoxes ?c))))
 
 (inspect
-  (ekeko [?a ?b ?c]
+  (ekeko [?b]
+    (l/fresh [?a]
                     (jsoot/soot|method-soot|unit ?a ?b)
-                    (soot|method-name ?a "helperMethod")
-                    (jsoot/soot-unit-calls-method ?b ?c)))
+                    (soot|method-name ?a "unused"))))
 
 (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
      (inferAdviceFrame (first(first allAdvice))))
