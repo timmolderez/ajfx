@@ -4,6 +4,7 @@
   ekeko-ajfx.sandbox
   (:refer-clojure :exclude [== type declare class])
   (:require [clojure.core.logic :as l]
+            [clojure.stacktrace :as st]
             [damp.ekeko.aspectj
              [weaverworld :as w]
              [soot :as ajsoot]]
@@ -19,6 +20,7 @@
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
+    [soot.toolkits.graph ExceptionalUnitGraph]
     [org.aspectj.lang Signature]
     [java.lang Integer]
     [org.eclipse.jdt.core IJavaElement ITypeHierarchy IType IPackageFragment IClassFile ICompilationUnit
@@ -30,39 +32,50 @@
     [org.aspectj.weaver.patterns Pointcut AndPointcut]
     ))
 
+(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#)) 
+
 (defn showCflowGraph
   "Use Ekeko's visualizer to show the control-flow graph of a soot.Body"
   [body]
   (let 
     [labelProvider (damp.ekeko.gui.EkekoLabelProvider.)
      graph (new ExceptionalUnitGraph body)
-     nodes (-> body .getUnits)
-     
-     edges nil]
+     nodes (-> body .getUnits)]
     (ekeko-visualize
       ; nodes
-      [[1] [(new String "bla")] [3]]
+    (dbg (into [] 
+           (map vector (map (fn [node] (.toString node)) nodes)))) 
+      
       ; edges
-      [[1 "bla"] ["bla" 3] [3 "bla"]]
+;    [[(first (-> gMeth .getActiveBody .getUnits)) (second (-> gMeth .getActiveBody .getUnits))]]
+      (into [] (mapcat identity (map (fn [node] ; for each unit
+                                 (map (fn [succ] ; for each successor of unit
+                                        [(.toString node) (.toString succ)])
+                                   (-> graph (.getSuccsOf node))))
+                          nodes)))
+      
       :node|label
-      (fn [typedeclaration] (.getText labelprovider typedeclaration))
+      (fn [node] (.getText labelProvider node))
       :node|image 
-      (fn [typedeclaration] (.getImage labelprovider typedeclaration))
+      (fn [node] (.getImage labelProvider node))
       :edge|style 
       (fn [src dest] edge|directed)
-      :edge|label 
-      (fn [edge] "test")
       :layout
       layout|horizontaltree)))
 
+[[1 "bla"] ["bla" 3] [3 "bla"]]
+
  (def gMeth (second (first (ekeko [?a ?b] (ajsoot/advice-soot|method ?a ?b)))))
+ (showCflowGraph (-> gMeth .getActiveBody))
  
- (def gGraph (new ExceptionalUnitGraph (-> gMeth .getActiveBody)))
-
-(showCflowGraph (-> gMeth .getActiveBody)) 
+ (.toString (first (-> gMeth .getActiveBody .getUnits)))
  
+(def gGraph (new ExceptionalUnitGraph (-> gMeth .getActiveBody)))
+(-> gGraph (.getSuccsOf (first (-> gMeth .getActiveBody .getUnits))) )
 
-(-> (new Object) .toString)
+
+(
+ 
 (-> (first (nth (ekeko [?a] (w/advice ?a)) 1)) .getDeclaringAspect)
 
 (let [labelprovider (damp.ekeko.gui.EkekoLabelProvider.)]
