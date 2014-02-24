@@ -32,7 +32,7 @@
     [org.aspectj.weaver.patterns Pointcut AndPointcut]
     ))
 
-(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#)) 
+(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
 
 (defn showCflowGraph
   "Use Ekeko's visualizer to show the control-flow graph of a soot.Body"
@@ -43,27 +43,26 @@
      nodes (-> body .getUnits)]
     (ekeko-visualize
       ; nodes
-    (dbg (into [] 
-           (map vector (map (fn [node] (.toString node)) nodes)))) 
-      
-      ; edges
-;    [[(first (-> gMeth .getActiveBody .getUnits)) (second (-> gMeth .getActiveBody .getUnits))]]
-      (into [] (mapcat identity (map (fn [node] ; for each unit
-                                 (map (fn [succ] ; for each successor of unit
-                                        [(.toString node) (.toString succ)])
-                                   (-> graph (.getSuccsOf node))))
-                          nodes)))
-      
-      :node|label
-      (fn [node] (.getText labelProvider node))
-      :node|image 
-      (fn [node] (.getImage labelProvider node))
-      :edge|style 
-      (fn [src dest] edge|directed)
-      :layout
-      layout|horizontaltree)))
+      (into [] 
+            (map vector (map (fn [node] (.toString node)) nodes)))) 
+    
+    ; edges
+    (into [] (mapcat identity (map (fn [node] ; for each unit
+                                     (map (fn [succ] ; for each successor of unit
+                                            [(.toString node) (.toString succ)])
+                                          (-> graph (.getSuccsOf node))))
+                                   nodes)))
+    
+    :node|label
+    (fn [node] (.getText labelProvider node))
+    :node|image 
+    (fn [node] (.getImage labelProvider node))
+    :edge|style 
+    (fn [src dest] edge|directed)
+    :layout
+    layout|tree))
 
-[[1 "bla"] ["bla" 3] [3 "bla"]]
+; edge format [[1 "bla"] ["bla" 3] [3 "bla"]]
 
  (def gMeth (second (first (ekeko [?a ?b] (ajsoot/advice-soot|method ?a ?b)))))
  (showCflowGraph (-> gMeth .getActiveBody))
@@ -96,7 +95,7 @@
     :edge|label 
       (fn [edge] "test")
     :layout
-      layout|horizontaltree
+      layout|tree
         ))
 
 

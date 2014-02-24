@@ -13,7 +13,8 @@
         [clojure.repl]
         [damp.ekeko logic]
         [damp.ekeko]
-        [ekeko-ajfx.soot])
+        [ekeko-ajfx.soot]
+        [ekeko-ajfx.debug])
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]))
@@ -21,6 +22,7 @@
 
 (defn varType-recursive
   [var unitChain]
+  "Helper method of varType"
   (let [unit (first unitChain)
         varName (-> var .getName)
         unitRest (rest unitChain)]
@@ -153,10 +155,10 @@ For example, the function could return a list like this:
       directWrites 
       (apply concat pulledUpWrites))))
 
+(inspect(dbg (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
+     (inferAdviceFrame (first(first allAdvice))))))
 
-(inspect(let [allAdvice (ekeko [?advice] (w/advice ?advice))]
-     (inferAdviceFrame (first(first allAdvice)))))
-
+(inspect (ekeko [?advice] (w/advice ?advice))) 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
