@@ -40,16 +40,17 @@
   (let 
     [labelProvider (damp.ekeko.gui.EkekoLabelProvider.)
      graph (new ExceptionalUnitGraph body)
-     nodes (-> body .getUnits)]
+     nodes (-> body .getUnits)
+     toString (fn [unit] (str (-> unit (.getTag "LineNumberTag")) ": " (.toString unit)))]
     (ekeko-visualize
       ; nodes
-          (into []
-            (map vector (map (fn [node] (.toString node)) nodes))) 
+     (into []
+            (map vector (map (fn [node] (toString node)) nodes))) 
     
     ; edges
     (into [] (mapcat identity (map (fn [node] ; for each unit
                                      (map (fn [succ] ; for each successor of unit
-                                            [(.toString node) (.toString succ)])
+                                            [(toString node) (toString succ)])
                                           (-> graph (.getSuccsOf node))))
                                    nodes)))
     
@@ -62,6 +63,7 @@
     :layout
     layout|tree)))
 
+(showCflowGraph (-> (getAdviceN 0) .getActiveBody))
 
 (defn getAdviceN
   "Get the nth advice body in the system (as a Soot method)" 
@@ -73,7 +75,7 @@
                            (ajsoot/advice-soot|method ?advice ?method)))
            n)))
 
-(showCflowGraph (-> (getAdviceN 0) .getActiveBody))
+(inspect (-> (getAdviceN 0) .getActiveBody))
 ;
 ;(inspect (ekeko [?method]
 ;                  (l/fresh [?advice]
