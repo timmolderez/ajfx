@@ -1,5 +1,5 @@
 (ns
-  ^{:doc "Extra relations to query Soot control-flow graph."
+  ^{:doc "Just a sandbox to tinker and e"
     :author "Tim Molderez" }
   ekeko-ajfx.sandbox
   (:refer-clojure :exclude [== type declare class])
@@ -10,7 +10,7 @@
              [soot :as ajsoot]]
             [damp.ekeko.soot
              [soot :as jsoot]])
-  (:use ;[inspector-jay.core]
+  (:use [inspector-jay.core]
         [clojure.repl]
         [damp.ekeko logic]
         [damp.ekeko]
@@ -32,9 +32,12 @@
     [org.aspectj.weaver.patterns Pointcut AndPointcut]
     ))
 
+
+
+
 (defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
 
-(defn showCflowGraph
+(defn showCflowGraph2
   "Use Ekeko's visualizer to show the control-flow graph of a soot.Body"
   [body]
   (let 
@@ -44,7 +47,7 @@
     (ekeko-visualize
       ; nodes
       (into [] 
-            (map vector (map (fn [node] (.toString node)) nodes)))) 
+            (map vector (map (fn [node] (.toString node)) nodes))) 
     
     ; edges
     (into [] (mapcat identity (map (fn [node] ; for each unit
@@ -60,17 +63,20 @@
     :edge|style 
     (fn [src dest] edge|directed)
     :layout
-    layout|tree))
+    layout|tree)))
+
+(ekeko-visualize nil nil)
 
 ; edge format [[1 "bla"] ["bla" 3] [3 "bla"]]
 
  (def gMeth (second (first (ekeko [?a ?b] (ajsoot/advice-soot|method ?a ?b)))))
- (showCflowGraph (-> gMeth .getActiveBody))
+ (showCflowGraph2 (-> gMeth .getActiveBody))
  
  (.toString (first (-> gMeth .getActiveBody .getUnits)))
  
 (def gGraph (new ExceptionalUnitGraph (-> gMeth .getActiveBody)))
 (-> gGraph (.getSuccsOf (first (-> gMeth .getActiveBody .getUnits))) )
+
 
 
 (

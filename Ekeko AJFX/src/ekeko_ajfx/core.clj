@@ -17,7 +17,8 @@
         [ekeko-ajfx.debug])
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
-    [soot.jimple ThisRef ParameterRef]))
+    [soot.jimple ThisRef ParameterRef]
+    [soot.toolkits.graph ExceptionalUnitGraph]))
 
 
 (defn varType-recursive
@@ -54,8 +55,7 @@
            (jsoot/soot-unit :JIdentityStmt ?unit)
            (equals ?local (.getLeftOp ?unit))     
            (equals ParameterRef (.getClass (.getRightOp ?unit)))
-           (equals ?index (.getIndex(.getRightOp ?unit)))
-      ))
+           (equals ?index (.getIndex(.getRightOp ?unit)))))
 
 (defn jimpleLocal-parameterIndex-fun
   "Functional wrapper for jimpleLocal-parameterIndex"
@@ -133,9 +133,9 @@ For example, the function could return a list like this:
       directWrites 
       (apply concat pulledUpWrites))))))
   
-(defn inferAdviceFrame
+(defn inferAdviceFrame0
   [advice]
-  "Infer the frame condition of an advice.
+  "Infer the frame condition of an advice. (context,flow&path-insensitive!)
 @param advice the advice we want to analyse (can be obtained via w/advice)
 @return the frame condition is a list of variables that might change
 @see inferMethodFrame"
@@ -155,14 +155,26 @@ For example, the function could return a list like this:
       directWrites 
       (apply concat pulledUpWrites))))
 
-(inspect(dbg (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
-     (inferAdviceFrame (first(first allAdvice))))))
+(defn inferAdviceFrame
+  [advice]
+  "Infers the frame condition of an advice."
+  (let
+    [body (first (first 
+                   (ekeko [?method]
+                          (w/advice advice)
+                          (ajsoot/advice-soot|method advice ?method))))
+     cflow]
+    body
+    )) 
 
-(inspect (ekeko [?advice] (w/advice ?advice))) 
+;(inspect (ekeko [?advice] (w/advice ?advice)))
+;
+;(inspect (getAdviceN 1))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(comment
+(let [allAdvice (ekeko [?advice] (w/advice ?advice))]
+     (inferAdviceFrame (first(nth allAdvice 0))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(comment
 (inspect 
   (ekeko 
     [?a ?b ?c]
@@ -177,7 +189,7 @@ For example, the function could return a list like this:
 
 (inspect
   (ekeko [?b]
-    (l/fresh [?a]
+   (l/fresh [?a]
                     (jsoot/soot|method-soot|unit ?a ?b)
                     (soot|method-name ?a "unused"))))
 
@@ -185,8 +197,7 @@ For example, the function could return a list like this:
      (inferAdviceFrame (first(first allAdvice))))
 
 ; Get the units of a particular method
-
-(inspect
+(inspect
   (damp.ekeko/ekeko
     [?unit]
     (jsoot/soot-unit :JIdentityStmt ?unit)))

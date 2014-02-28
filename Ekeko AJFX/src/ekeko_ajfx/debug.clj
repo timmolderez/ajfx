@@ -8,13 +8,15 @@
             [damp.ekeko.soot
              [soot :as jsoot]])
   (:use
-        [clojure.repl]
-        [damp.ekeko logic]
-        [damp.ekeko]
-        [damp.ekeko visualization]
-        [damp.ekeko.visualization.view]
-        [clojure.inspector :exclude [inspect]])
-  (:import [soot.jimple IdentityStmt]
+    [inspector-jay.core]
+    [clojure.repl]
+    [damp.ekeko logic]
+    [damp.ekeko]
+    [damp.ekeko visualization]
+    [damp.ekeko.visualization.view]
+    [clojure.inspector :exclude [inspect]])
+  (:import 
+    [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
     [soot.toolkits.graph ExceptionalUnitGraph]
@@ -41,8 +43,8 @@
      nodes (-> body .getUnits)]
     (ekeko-visualize
       ; nodes
-      (into []
-            (map vector (map (fn [node] (.toString node)) nodes)))) 
+          (into []
+            (map vector (map (fn [node] (.toString node)) nodes))) 
     
     ; edges
     (into [] (mapcat identity (map (fn [node] ; for each unit
@@ -58,4 +60,24 @@
     :edge|style 
     (fn [src dest] edge|directed)
     :layout
-    layout|tree))
+    layout|tree)))
+
+
+(defn getAdviceN
+  "Get the nth advice body in the system (as a Soot method)" 
+  [n]
+  (first (nth 
+           (ekeko [?method]
+                  (l/fresh [?advice]
+                           (w/advice ?advice)
+                           (ajsoot/advice-soot|method ?advice ?method)))
+           n)))
+
+(showCflowGraph (-> (getAdviceN 0) .getActiveBody))
+;
+;(inspect (ekeko [?method]
+;                  (l/fresh [?advice]
+;                           (w/advice ?advice)
+;                           (ajsoot/advice-soot|method ?advice ?method))))
+;
+;(inspect (-> (getAdviceN 7) .getActiveBody))
