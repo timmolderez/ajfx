@@ -86,9 +86,9 @@
 (let [labelprovider (damp.ekeko.gui.EkekoLabelProvider.)]
       (ekeko-visualize
         ; nodes
-        [[1] [(new String "bla")] [3]]
+       [[1] [(new String "bla")] [3]]
         ; edges
-        [[1 "bla"] ["bla" 3] [3 "bla"]]
+       [[1 "bla"] ["bla" 3] [3 "bla"]]
     
         :node|label
       (fn [typedeclaration] 
@@ -110,12 +110,12 @@
     (let [labelprovider (damp.ekeko.gui.EkekoLabelProvider.)]
       (ekeko-visualize
         ; nodes
-        (ekeko [?str] 
+       (ekeko [?str] 
                (l/fresh [?a] 
                  (w/advice ?a)
                  (equals ?str (-> ?a .getDeclaringAspect))))
         ; edges
-        nil
+       nil
     
         :node|label
       (fn [typedeclaration] 
@@ -129,33 +129,3 @@
       layout|horizontaltree
         ))
   
-
-
-    (comment (defn
-  demo-visualization
-  []
-  (let [labelprovider (damp.ekeko.gui.EkekoLabelProvider.)]
-    (ekeko-visualize
-      ;nodes
-                   (ekeko [?t] 
-             (fresh [?root]
-                    (typedeclaration-name|qualified|string ?root "be.ac.chaq.model.ast.java.Expression")
-                    (conde [(equals ?t ?root)]
-                           [(typedeclaration-typedeclaration|super ?t ?root)])))
-      ;edges
-                   (ekeko [?fromuser ?totype]
-             (fresh [?anno ?annotypelit ?annotype]
-                    (annotation|ep-typeliteral ?anno ?annotypelit)
-                    (ast-typedeclaration|encompassing ?anno ?fromuser)
-                    (typeliteral-type ?annotypelit ?annotype)
-                    (typedeclaration-type ?totype ?annotype)))
-      :node|label
-      (fn [typedeclaration] 
-        (.getText labelprovider  typedeclaration))
-      :node|image 
-      (fn [typedeclaration] 
-        (.getImage labelprovider typedeclaration))
-      :edge|style 
-      (fn [src dest] edge|directed)
-      :layout
-      layout|horizontaltree))))

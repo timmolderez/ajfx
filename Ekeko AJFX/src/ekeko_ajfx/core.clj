@@ -18,8 +18,7 @@
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
-    [soot.toolkits.graph ExceptionalUnitGraph]))
-
+    [soot.toolkits.graph ExceptionalUnitGraph ExceptionalBlockGraph]))
 
 (defn varType-recursive
   [var unitChain]
@@ -171,8 +170,8 @@ For example, the function could return a list like this:
 ;
 ;(inspect (getAdviceN 1))
 
-(let [allAdvice (ekeko [?advice] (w/advice ?advice))]
-     (inferAdviceFrame (first(nth allAdvice 0))))
+(inspect (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
+     (inferAdviceFrame0 (first(nth allAdvice 0)))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (comment
 (inspect 
