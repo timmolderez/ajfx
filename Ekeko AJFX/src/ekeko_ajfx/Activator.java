@@ -4,8 +4,6 @@ import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
 
-import ccw.util.osgi.ClojureOSGi;
-
 public class Activator implements BundleActivator {
 
 	private static BundleContext context;
