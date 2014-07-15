@@ -7,8 +7,7 @@ Bundle-ClassPath: lib/clojure-1.5.1.jar,
  lib/core.logic-0.8.3.jar,
  .
 Bundle-Activator: ajfx.Activator
-Export-Package: ajfx,
- ekeko_ajfx
+Export-Package: ekeko_ajfx
 Require-Bundle: org.eclipse.ui,
  org.eclipse.core.runtime,
  damp.ekeko.plugin;bundle-version="1.0.3",

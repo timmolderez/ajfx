@@ -9,11 +9,10 @@
              [soot :as ajsoot]]
             [damp.ekeko.soot
              [soot :as jsoot]])
-  (:use ;[inspector-jay.core]
+  (:use [inspector-jay.core]
         [clojure.repl]
         [damp.ekeko logic]
-        [damp.ekeko]
-        [clojure.inspector :exclude [inspect]])
+        [damp.ekeko])
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
@@ -26,7 +25,7 @@
      MethodInvocation ClassInstanceCreation SuperConstructorInvocation SuperMethodInvocation
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]
-    ))
+  ))
 
 (defn- 
    lastIndexOfText 

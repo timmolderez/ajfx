@@ -10,7 +10,7 @@
              [soot :as ajsoot]]
             [damp.ekeko.soot
              [soot :as jsoot]])
-  (:use [inspector-jay.core]
+  (:use [damp.ekeko.inspector.inspector]
         [clojure.repl]
         [damp.ekeko logic]
         [damp.ekeko]
@@ -127,5 +127,7 @@
       (fn [src dest] edge|directed)
     :layout
       layout|horizontaltree
+    (ekeko+ [?a ?b] (jsoot/soot-method-body ?a ?b))
         ))
   
+    ; Get all Soot methods

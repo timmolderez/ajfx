@@ -19,7 +19,7 @@
     [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
-    [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph]
+    [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]
     [org.aspectj.lang Signature]
     [java.lang Integer]
     [org.eclipse.jdt.core IJavaElement ITypeHierarchy IType IPackageFragment IClassFile ICompilationUnit
@@ -94,6 +94,7 @@
 
 
 (showBlockCFG (-> (getAdviceN 0) .getActiveBody))
+(inspect (-> (getAdviceN 0) .getActiveBody))
 
 (defn getAdviceN
   "Get the nth advice body in the system (as a Soot method)" 
@@ -105,10 +106,7 @@
                            (ajsoot/advice-soot|method ?advice ?method)))
            n)))
 
-;(inspect (-> (getAdviceN 0) .getActiveBody))
-
-; Construct block graph
-(inspect (new BriefBlockGraph (-> (getAdviceN 0) .getActiveBody )))
+(inspect (new LoopNestTree (-> (getAdviceN 0) .getActiveBody )))
 ;
 ;(inspect (ekeko [?method]
 ;                  (l/fresh [?advice]
