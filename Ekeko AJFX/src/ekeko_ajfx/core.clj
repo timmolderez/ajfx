@@ -14,7 +14,8 @@
         [damp.ekeko logic]
         [damp.ekeko]
         [ekeko-ajfx.soot]
-        [ekeko-ajfx.debug])
+        [ekeko-ajfx.debug]
+        [ekeko-ajfx.analysis])
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
@@ -207,15 +208,20 @@ For example, the function could return a list like this:
     (l/fresh [?a ?callee ?recv]
              (jsoot/soot|method-soot|unit ?a ?b)
              (soot|method-name ?a "helperMethod")
-             (method-methodCalls ?a ?callee ?b ?recv)
-             )))
+             (method-methodCalls ?a ?callee ?b ?recv))))
+
+(inspect
+  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
+        method (first (first q))
+        frame (infer-frame method)]
+    frame))
 
 (inspect 
   (ekeko
-    [?b]
-    (l/fresh [?a]
+    [?b ?a]
+    (l/fresh []
              (jsoot/soot|method-soot|unit ?a ?b)
-             (soot|method-name ?a "helperMethod")
+             (soot|method-name ?a "helper")
              )))
 
 (inspect 

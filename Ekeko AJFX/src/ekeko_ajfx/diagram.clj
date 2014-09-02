@@ -22,6 +22,10 @@
 "Ensures all objects within a graph have a unique identifier"
 (def last-obj-id (atom 0))
 
+(defn reset-obj-id []
+  "Reset the last-object-identifier to 0"
+  (swap! last-obj-id (fn [x] 0))) 
+
 (defn new-obj-id []
   "Obtain a unique identifier for a new object. 
    (Returned as a Clojure keyword, so it can be used as a key in maps..)"
