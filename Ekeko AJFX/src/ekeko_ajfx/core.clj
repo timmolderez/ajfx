@@ -216,6 +216,20 @@ For example, the function could return a list like this:
         frame (infer-frame method)]
     frame))
 
+(inspect
+  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
+        method (first (first q))
+        frame (infer-frame method)]
+    frame))
+
+(let [q (ekeko [?a] (soot|method-name ?a "helper"))
+        method (first (first q))
+        body (-> method .getActiveBody)]
+    (showBlockCFG body))
+
+
+
+
 (inspect 
   (ekeko
     [?b ?a]

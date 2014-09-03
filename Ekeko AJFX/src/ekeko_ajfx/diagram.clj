@@ -38,9 +38,8 @@
         id-sets (for [x formals] #{(new-obj-id)})
         names (zipmap
                 (concat root-names names)
-                (concat id-sets id-sets))
-        names-this (assoc names :this #{(new-obj-id)})]
-    {:names names-this
+                (concat id-sets id-sets))]
+    {:names names
     :must-mod {}
     :may-mod {}
     :may-read {}}))
@@ -54,9 +53,16 @@
     (assoc diagram :names new-names)))
 
 
-(defn add-object [diagram name]
-  "Add a new object to a diagram. This object is referred to by a certain name."
-  (add-name diagram (new-obj-id) name))
+(defn add-object [diagram names]
+  "Add a new object to a diagram. This object can be referred to by a number of names."
+  (let [id (new-obj-id)
+        helper (fn [diagram names]
+                 (if (empty? names)
+                   diagram
+                   (recur
+                     (add-name diagram id (first names))
+                     (rest names))))]
+    (helper diagram names)))
 
 (defn replace-name [diagram old-name new-name]
   "All objects that are referred to by old-name will now be referred to be new-name instead."
