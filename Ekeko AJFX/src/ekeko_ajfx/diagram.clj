@@ -12,6 +12,7 @@
              }
            :may-be-modified { ... }
            :may-be-read { ... }
+           :return-val #{:1 :3}
           }"
     :author "Tim Molderez" }
   ekeko-ajfx.diagram
@@ -111,3 +112,9 @@
 (defn add-edges-to-new-object [diagram source-name label kind])
 
 (defn remove-edges [diagram source-name label kind])
+
+(defn add-return-val [diagram name]
+  (let [return-val (diagram :return-val)
+        objs (find-objs-by-name diagram name)
+        new-return-val (clojure.set/union return-val objs)]
+    (assoc diagram :return-val new-return-val)))
