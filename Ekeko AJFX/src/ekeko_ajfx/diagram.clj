@@ -2,17 +2,15 @@
   ^{:doc "Defines the aliasing diagrams to be used by the frame inference algorithm, and its operations
           
           To give an idea of what the data structure behind an alias diagram looks like:
-          {:objects { // Maps objects to the names of that object
-             :0 #{'to' 'this'}
-             :1 #{'amount'}
-             :2 nil}
-           :must-be-modified { // Maps the source of edges to its names and its targets
+          {:names { // Maps objects to the names of that object
+             :bla #{:1 :2}}
+           :must-mod { // Maps the source of edges to its names and its targets
              :0 #{['f' :1] ['g' :3]}
              ...
              }
-           :may-be-modified { ... }
-           :may-be-read { ... }
-           :return-val #{:1 :3}
+           :may-mod { ... }
+           :may-read { ... }
+           :return #{:1 :3}
           }"
     :author "Tim Molderez" }
   ekeko-ajfx.diagram
@@ -43,13 +41,14 @@
     {:names names
     :must-mod {}
     :may-mod {}
-    :may-read {}}))
+    :may-read {}
+    :return {}}))
 
-(defn add-name [diagram object name]
-  "An object can now be referred to by an additional name."
+(defn add-name [diagram objects name]
+  "A set of objects can now be referred to by an additional name."
   (let [name-key (keyword name)
         name-set ((diagram :names) name-key)
-        new-name-set (clojure.set/union name-set #{object})
+        new-name-set (clojure.set/union name-set objects)
         new-names (assoc (diagram :names) name-key new-name-set)]
     (assoc diagram :names new-names)))
 
@@ -61,7 +60,7 @@
                  (if (empty? names)
                    diagram
                    (recur
-                     (add-name diagram id (first names))
+                     (add-name diagram #{id} (first names))
                      (rest names))))]
     (helper diagram names)))
 
@@ -105,7 +104,8 @@
         add-edge (fn [edges src tgt]
                    (let [new-set (conj (edges src) tgt)]
                      (assoc edges src new-set)))
-        new-edges ()]
+        new-edges (set (for [x target-ids]
+                        [x label]))]
     (assoc diagram kind new-edges)
     ))
 
@@ -114,7 +114,7 @@
 (defn remove-edges [diagram source-name label kind])
 
 (defn add-return-val [diagram name]
-  (let [return-val (diagram :return-val)
+  (let [return-val (diagram :return)
         objs (find-objs-by-name diagram name)
         new-return-val (clojure.set/union return-val objs)]
-    (assoc diagram :return-val new-return-val)))
+    (assoc diagram :return new-return-val)))
