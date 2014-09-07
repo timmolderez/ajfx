@@ -54,9 +54,12 @@
 
 
 (defn add-object [diagram names]
-  "Add a new object to a diagram. This object can be referred to by a number of names."
-  (let [id (new-obj-id)
-        helper (fn [diagram names]
+  "Add a new object to a diagram (and generate an id). This object can be referred to by a number of names."
+  (add-object-with-id diagram (new-obj-id) names))
+
+(defn add-object-with-id [diagram id names]
+  "Add a new object to a diagram with a given id. This object can be referred to by a number of names."
+  (let [helper (fn [diagram names]
                  (if (empty? names)
                    diagram
                    (recur
@@ -90,28 +93,54 @@
         all-edges (diagram kind)
         matching-edges (select-keys all-edges source-ids)
         filtered (for [x matching-edges]
-                   (let [src (x first)
-                         tgts (x second)]
+                   (let [src (first x)
+                         tgts (second x)] 
                      (for [y tgts]
-                       [src y])))]
+                       [src (first y) (second y)])))] 
     (mapcat identity filtered))) ; Flatten by one level
 
 (defn add-edges [diagram source-name label kind target-name]
-  "Add edges from all nodes with source-name"
+  "Add edges from all nodes with source-name to all nodes with target-name"
   (let [source-ids (find-objs-by-name diagram source-name)
         target-ids (find-objs-by-name diagram target-name)
-        all-edges (diagram kind)
-        add-edge (fn [edges src tgt]
-                   (let [new-set (conj (edges src) tgt)]
-                     (assoc edges src new-set)))
-        new-edges (set (for [x target-ids]
-                        [x label]))]
-    (assoc diagram kind new-edges)
-    ))
+        new-tgts (set (for [x target-ids]
+                        [x label]))
+        add-edges-helper (fn [edges sources]
+                           (if (empty? sources)
+                             edges
+                             (recur
+                               (let [cur-source (first sources)
+                                     cur-tgts (edges cur-source)]
+                                 (assoc edges cur-source (clojure.set/union cur-tgts new-tgts)))
+                               (rest sources))))]
+    (assoc diagram kind (add-edges-helper (diagram kind) source-ids))))
 
-(defn add-edges-to-new-object [diagram source-name label kind])
+(defn add-edges-to-new-object [diagram source-name label kind target-name]
+  "For each node with source-name, create a new object and add an edge to it. This new object is named target-name"
+  (let [source-ids (find-objs-by-name diagram source-name)
+        new-ids (for [x source-ids] (new-obj-id)) 
+        add-edges-helper (fn [edges sources ids]
+                           (if (empty? sources)
+                             edges
+                             (recur
+                               (let [cur-source (first sources) 
+                                     cur-tgts (edges cur-source)]
+                                 (assoc edges cur-source (clojure.set/union cur-tgts #{[(first ids) label]})))
+                               (rest sources)
+                               (rest ids))))]
+    ; Note that we don't need to call add-object since the new objects are nameless..
+    (add-name
+      (assoc diagram kind (add-edges-helper (diagram kind) source-ids new-ids))
+      new-ids target-name)))
 
-(defn remove-edges [diagram source-name label kind])
+(defn remove-edges [diagram source-id label kind]
+  "Remove the edges starting at a given object, with a given label"
+  (let [edges ((diagram kind) source-id)
+        filtered-edges (set (filter
+                              (fn [x] (not= label (second x)))
+                              edges))
+        new-edges (assoc (diagram kind) source-id filtered-edges)]
+    (assoc diagram kind new-edges)))
 
 (defn add-return-val [diagram name]
   (let [return-val (diagram :return)
