@@ -14,12 +14,11 @@
         [damp.ekeko logic]
         [damp.ekeko]
         [ekeko-ajfx.soot]
-        [ekeko-ajfx.debug]
         [ekeko-ajfx.analysis])
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
-    [soot.toolkits.graph ExceptionalUnitGraph ExceptionalBlockGraph]))
+    [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]))
 
 (defn varType-recursive
   [var unitChain]
@@ -216,10 +215,16 @@ For example, the function could return a list like this:
         frame (infer-frame method)]
     frame))
 
+
 (inspect
   (let [q (ekeko [?a] (soot|method-name ?a "helper"))
         method (first (first q))]
-    method))
+    (-> method .getActiveBody)))
+
+(inspect
+  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
+        method (first (first q))]
+    (new LoopNestTree (-> method .getActiveBody))))
 
 (let [q (ekeko [?a] (soot|method-name ?a "helper"))
         method (first (first q))
