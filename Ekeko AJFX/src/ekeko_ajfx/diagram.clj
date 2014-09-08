@@ -42,7 +42,7 @@
     :must-mod {}
     :may-mod {}
     :may-read {}
-    :return {}}))
+    :return #{}}))
 
 (defn add-name [diagram objects name]
   "A set of objects can now be referred to by an additional name."
@@ -172,32 +172,6 @@
                    (recur (apply func input (first args)) (rest args))))]
     (helper x args)))
 
-(macroexpand '(multi-apply 3 + [[4 6] [5 7] [6 8]]))
-
-(multi-apply 3 + [[4 6] [5 7] [6 8]])
-
-(defn merge-diagrams [d1 d2]
-  (let [new-diag (new-diagram [])
-        merged (assoc new-diag :names (d1 :names))
-        merged-names (multi-apply 
-                       merged
-                       add-name 
-                       (for [x (keys (d2 :names))]
-                         [((d2 :names) x) (name x)]))
-        merged-reads (d/union-edges (d1 :may-read) (d2 :may-read))
-
-;        new-name-helper (fn [diag d2keys]
-;                          (if (empty? d2keys)
-;                            diag
-;                            (recur 
-;                              (add-name diag 
-;                                (d2 :names (first d2keys))
-;                                (name (first d2keys)))
-;                              (rest d2keys))))
-;        merged-names (new-name-helper merged (keys (d2 :names)))
-        ]))
-
-
 (defn union-edges [one two]
   (multi-apply
     one
@@ -210,16 +184,58 @@
 (defn intersect-edges [one two]
   (multi-apply
     {}
-    (fn [map key]
+    (fn [pair key]
       (let [one-val (one key)
             two-val (two key)
-            one-labels (set (for [x one-val] (first x)))
-            two-labels (set (for [x two-val] (first x)))
+            one-labels (set (for [x one-val] (second x)))
+            two-labels (set (for [x two-val] (second x)))
             intersect-labels (clojure.set/intersection one-labels two-labels)
-            union-val (clojure.set/union one-val two-val)]
-        (assoc map key (clojure.set/union old-val new-val))))
-    (clojure.set/union 
-      (set (keys one))
-      (set (keys two)))))
+            union-val (clojure.set/union one-val two-val)
+            filter-func (fn [x] (contains? intersect-labels (second x)))
+            filtered (filter filter-func union-val)
+            compl (filter (complement filter-func) union-val)]
+        [(if (empty? filtered) (first pair) (assoc (first pair) key filtered))
+         (if (empty? compl) (second pair) (assoc (second pair) key compl))
+         ]
+         
+        ))
+    (for [x (clojure.set/union (set (keys one)) (set (keys two)))] [x])))
 
-(union-edges {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]}} {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})
+(intersect-edges {:1 #{[:4 "f"] [:3 "g"] [:4 "g"] [:5 "h"]} :2 #{[:1 "f"] [:3 "g"]}} {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})
+
+(defn merge-diagrams [d1 d2]
+  (let [new-diag (new-diagram [])
+        merged-names (multi-apply (d1 :names)
+                       (fn [names-map key]
+                         (let [old-val (names-map key)
+                               new-val ((d2 :names) key)]
+                           (assoc names-map key (clojure.set/union old-val new-val))))
+                       (for [x (keys (d2 :names))] [x]))
+;        merged-names (multi-apply 
+;                       merged
+;                       add-name 
+;                       (for [x (keys (d2 :names))]
+;                         [((d2 :names) x) (name x)]))
+        merged-reads (union-edges (d1 :may-read) (d2 :may-read))
+        intersect (intersect-edges (d1 :must-mod) (d2 :must-mod))
+        merged-musts (first intersect)
+        merged-mays (union-edges 
+                      (union-edges (d1 :may-mod) (d2 :may-mod)) 
+                      (second intersect)) 
+
+;        new-name-helper (fn [diag d2keys]
+;                          (if (empty? d2keys)
+;                            diag
+;                            (recur 
+;                              (add-name diag 
+;                                (d2 :names (first d2keys))
+;                                (name (first d2keys)))
+;                              (rest d2keys))))
+;        merged-names (new-name-helper merged (keys (d2 :names)))
+        ]
+    (-> (new-diagram []) 
+      (assoc :names merged-names)
+      (assoc :may-read merged-reads)
+      (assoc :may-mod merged-mays)
+      (assoc :must-mod merged-musts)
+      (assoc :return (clojure.set/union (d1 :return) (d2 :return))))))

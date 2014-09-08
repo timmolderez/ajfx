@@ -46,7 +46,7 @@
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (instance? JAssignStmt unit) (assign-stmt diagram unit)
                (instance? JInvokeStmt unit) nil
-               (instance? JGotoStmt unit) nil
+               (instance? JGotoStmt unit) (loop-stmt diagram unit units) 
                (instance? JIfStmt unit) (if-stmt diagram unit units) 
                (instance? ReturnStmt unit) (return-stmt diagram unit) 
                :else diagram)
@@ -143,8 +143,15 @@
                        end-else)]
     [merged-diagram next-unit]))
 
-(defn loop-stmt [diagram body]
-  )
+(defn loop-stmt [diagram unit units]
+  (let [end-loop (-> unit .getTarget)
+        merged-diagram (d/multi-apply diagram
+                         (fn [diagram]
+                           (infer-frame-helper diagram units 
+                             (-> units (.getSuccOf unit)) 
+                             (-> units (.getPredOf end-loop))))
+                         [[] [] []])]
+    [merged-diagram (-> units (.getSuccOf end-loop))]))
 
 (defn call-stmt [diagram recv static-type meth args]
   )
