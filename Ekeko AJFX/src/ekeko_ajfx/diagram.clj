@@ -52,7 +52,6 @@
         new-names (assoc (diagram :names) name-key new-name-set)]
     (assoc diagram :names new-names)))
 
-
 (defn add-object [diagram names]
   "Add a new object to a diagram (and generate an id). This object can be referred to by a number of names."
   (add-object-with-id diagram (new-obj-id) names))
@@ -118,7 +117,8 @@
 (defn add-edges-to-new-object [diagram source-name label kind target-name]
   "For each node with source-name, create a new object and add an edge to it. This new object is named target-name"
   (let [source-ids (find-objs-by-name diagram source-name)
-        new-ids (for [x source-ids] (new-obj-id)) 
+        new-ids (for [x source-ids]
+                  (keyword (str (name x) label))) 
         add-edges-helper (fn [edges sources ids]
                            (if (empty? sources)
                              edges
@@ -147,3 +147,79 @@
         objs (find-objs-by-name diagram name)
         new-return-val (clojure.set/union return-val objs)]
     (assoc diagram :return new-return-val)))
+
+;(defmacro multi-apply [x func args]
+;  "Apply func to x, using the 1st element of args as parameters;
+;   then apply func again using the 2nd element of args as parameters; ...
+;   and so on until args is exhausted."
+;  (if (not (empty? args))
+;    (let [first-app (list func x (first args))]
+;      `(repeated-thread ~first-app ~func ~(rest args)))
+;    x))
+
+;(defmacro multi-apply [x func args]
+;  "Apply func to x, using the 1st element of args as parameters;
+;   then apply func again using the 2nd element of args as parameters; ...
+;   and so on until args is exhausted."
+;  (if (not (empty? args))
+;    `(multi-apply (apply ~func ~x ~(first args)) ~func ~(rest args))
+;    x))
+
+(defn multi-apply [x func args]
+  (let [helper (fn [input args]
+                 (if (empty? args)
+                   input
+                   (recur (apply func input (first args)) (rest args))))]
+    (helper x args)))
+
+(macroexpand '(multi-apply 3 + [[4 6] [5 7] [6 8]]))
+
+(multi-apply 3 + [[4 6] [5 7] [6 8]])
+
+(defn merge-diagrams [d1 d2]
+  (let [new-diag (new-diagram [])
+        merged (assoc new-diag :names (d1 :names))
+        merged-names (multi-apply 
+                       merged
+                       add-name 
+                       (for [x (keys (d2 :names))]
+                         [((d2 :names) x) (name x)]))
+        merged-reads (d/union-edges (d1 :may-read) (d2 :may-read))
+
+;        new-name-helper (fn [diag d2keys]
+;                          (if (empty? d2keys)
+;                            diag
+;                            (recur 
+;                              (add-name diag 
+;                                (d2 :names (first d2keys))
+;                                (name (first d2keys)))
+;                              (rest d2keys))))
+;        merged-names (new-name-helper merged (keys (d2 :names)))
+        ]))
+
+
+(defn union-edges [one two]
+  (multi-apply
+    one
+    (fn [map key]
+      (let [old-val (map key)
+            new-val (two key)]
+        (assoc map key (clojure.set/union old-val new-val))))
+    (for [x (keys two)] [x])))
+
+(defn intersect-edges [one two]
+  (multi-apply
+    {}
+    (fn [map key]
+      (let [one-val (one key)
+            two-val (two key)
+            one-labels (set (for [x one-val] (first x)))
+            two-labels (set (for [x two-val] (first x)))
+            intersect-labels (clojure.set/intersection one-labels two-labels)
+            union-val (clojure.set/union one-val two-val)]
+        (assoc map key (clojure.set/union old-val new-val))))
+    (clojure.set/union 
+      (set (keys one))
+      (set (keys two)))))
+
+(union-edges {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]}} {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})

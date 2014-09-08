@@ -21,10 +21,8 @@
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
-(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
-
 ; Test case
-(let [diagram (-> (d/new-diagram ["a" "b" "c"]) 
+(let [diagram (-> (d/new-diagram ["a" "b" "c"])
                 (d/add-object #{"bla"})
                 (d/add-name #{:1 :2} "d") 
                 (d/add-edges "a" "f" :may-mod "b")
@@ -33,7 +31,7 @@
                 (d/remove-edges :1 "g" :may-mod))]
   (dbg diagram)
   (dbg (d/find-edges diagram "a" "f" :may-mod))
-  (d/reset-obj-id))
+  (d/reset-obj-id)) 
 
 (defn infer-frame [method]
   (let [body (-> method .getActiveBody)
@@ -128,9 +126,6 @@
         lhs-name (-> lhs .toString)
         obj-name (str "@" cls-name (new-id))]
     (d/add-object diagram [obj-name] (d/remove-name diagram lhs-name))))
-
-(defn merge-diagrams [d1 d2]
-  ) 
 
 (defn if-stmt [diagram unit units]
   (let [begin-else (-> unit .getTarget)
