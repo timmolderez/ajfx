@@ -39,6 +39,7 @@
                 (concat root-names names)
                 (concat id-sets id-sets))]
     {:names names
+     :formals [] 
     :must-mod {}
     :may-mod {}
     :may-read {}
@@ -51,6 +52,10 @@
         new-name-set (clojure.set/union name-set objects)
         new-names (assoc (diagram :names) name-key new-name-set)]
     (assoc diagram :names new-names)))
+
+(defn add-formal [diagram name]
+  (let [new-formals (conj (diagram :formals) name)]
+    (assoc diagram :formals new-formals))) 
 
 (defn add-object [diagram names]
   "Add a new object to a diagram (and generate an id). This object can be referred to by a number of names."
@@ -235,6 +240,7 @@
         ]
     (-> (new-diagram []) 
       (assoc :names merged-names)
+      (assoc :formals (d1 :formals)) 
       (assoc :may-read merged-reads)
       (assoc :may-mod merged-mays)
       (assoc :must-mod merged-musts)

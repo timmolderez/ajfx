@@ -62,7 +62,8 @@
 
 (defn identity-stmt [diagram unit]
   (let [name (-> unit .getLeftOp .getName)]
-    (d/add-object diagram [name (str "@" name)])))
+    (-> (d/add-object diagram [name (str "@" name)])
+      (d/add-formal name))))
 
 (defn assign-stmt [diagram unit]
   (let [lhs (-> unit .getLeftOp)
@@ -153,8 +154,25 @@
                          [[] [] []])]
     [merged-diagram (-> units (.getSuccOf end-loop))]))
 
-(defn call-stmt [diagram recv static-type meth args]
-  )
+(defn compute-mappings [call-diag ctxt-diag formals actuals]
+  (let [mapped-roots (d/multi-apply 
+                       {}
+                       (fn [m root]
+                         (let [index (.indexOf formals (subs root 1))]
+                           (if (not= index -1)
+                             (assoc m (first ((call-diag :names) root)) ((ctxt-diag :names) (nth actuals index)))
+                             (assoc m (first ((call-diag :names) root)) #{(d/new-obj-id)}))))
+                       (filter
+                         (fn [x] (.startsWith x "@"))
+                         (keys (call-diag :names))))]
+    ))
+
+(defn call-stmt [ctxt-diagram unit]
+  (let [method (-> unit .getInvokeExpr .getMethod)
+        call-diagram (infer-frame method)
+        actuals (-> unit .getInvokeExpr .getArgs)
+        call2ctxt (compute-mappings call-diagram ctxt-diagram (call-diagram :formals))]
+    )) 
 
 (defn return-stmt [diagram unit]
   (let [value (-> unit .getOp)]
