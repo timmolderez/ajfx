@@ -138,7 +138,7 @@
         else-diagram (if (= nil end-else)
                        diagram
                        (infer-frame-helper diagram units begin-else (-> units (.getPredOf end-else))))
-        merged-diagram (merge-diagrams if-diagram else-diagram)
+        merged-diagram (d/merge-diagrams if-diagram else-diagram)
         next-unit (if (= nil end-else)
                        begin-else
                        end-else)]
@@ -154,6 +154,16 @@
                          [[] [] []])]
     [merged-diagram (-> units (.getSuccOf end-loop))]))
 
+(defn cur-value [diagram object field]
+  (let [must-found (filter
+                     (fn [x] (= field (second x)))
+                     ((diagram :must-mod ) object))]
+    (if (empty? must-found)
+      (filter
+        (fn [x] (= field (second x)))
+        (clojure.set/union ((diagram :may-mod) object) ((diagram :may-read) object)))
+      must-found)))
+
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
   (let [mapped-roots (d/multi-apply 
                        {}
@@ -164,8 +174,25 @@
                              (assoc m (first ((call-diag :names) root)) #{(d/new-obj-id)}))))
                        (filter
                          (fn [x] (.startsWith x "@"))
-                         (keys (call-diag :names))))]
-    ))
+                         (keys (call-diag :names))))
+        map-edge (fn [m src tgt label]
+                   (d/multi-apply
+                     m
+                     (fn [])))
+        map-edges (fn [m objects]
+                    (let [call-obj (first objects)
+                          read-edges ((call-diag :may-read) call-obj)
+                          new-objects (concat
+                                        (rest objects)
+                                        (for [x read-edges] (first x)))
+                          new-m (d/multi-apply m
+                                  (fn [m tgt label])
+                                  read-edges)]
+                      (if (empty? new-objects) new-m (recur new-m new-objects))))
+        
+        
+        mapped-objs (map-edges mapped-roots (keys mapped-roots) (call-diag :may-read))]
+    mapped-objs))
 
 (defn call-stmt [ctxt-diagram unit]
   (let [method (-> unit .getInvokeExpr .getMethod)
