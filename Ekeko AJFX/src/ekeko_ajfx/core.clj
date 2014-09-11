@@ -217,7 +217,7 @@ For example, the function could return a list like this:
 
 
 (inspect
-  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
+  (let [q (ekeko [?a] (soot|method-name ?a "helper2"))
         method (first (first q))]
     (-> method .getActiveBody)))
 

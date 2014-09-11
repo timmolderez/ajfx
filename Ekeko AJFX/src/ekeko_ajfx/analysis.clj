@@ -44,8 +44,8 @@
   (let [unit-type (-> unit .getClass)
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
-               (instance? JAssignStmt unit) (assign-stmt diagram unit)
-               (instance? JInvokeStmt unit) nil
+               (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
+               (-> unit .containsInvokeExpr) (call-stmt unit)
                (instance? JGotoStmt unit) (loop-stmt diagram unit units) 
                (instance? JIfStmt unit) (if-stmt diagram unit units) 
                (instance? ReturnStmt unit) (return-stmt diagram unit) 
@@ -175,31 +175,57 @@
                        (filter
                          (fn [x] (.startsWith x "@"))
                          (keys (call-diag :names))))
-        map-edge (fn [m src tgt label]
-                   (d/multi-apply
-                     m
-                     (fn [])))
+        
         map-edges (fn [m objects]
                     (let [call-obj (first objects)
+                          ctxt-objs (m call-obj)
                           read-edges ((call-diag :may-read) call-obj)
                           new-objects (concat
                                         (rest objects)
                                         (for [x read-edges] (first x)))
                           new-m (d/multi-apply m
-                                  (fn [m tgt label])
+                                  (fn [m call-tgt label]
+                                    (let [ctxt-edges (reduce clojure.set/union
+                                                       (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
+                                      (assoc m call-tgt
+                                        (set (for [x ctxt-objs]
+                                              (first x))))))
                                   read-edges)]
-                      (if (empty? new-objects) new-m (recur new-m new-objects))))
-        
-        
-        mapped-objs (map-edges mapped-roots (keys mapped-roots) (call-diag :may-read))]
-    mapped-objs))
+                      (if (empty? new-objects) new-m (recur new-m new-objects))))]
+    (map-edges mapped-roots (keys mapped-roots) (call-diag :may-read))))
+
+(defn adjust-edges [ctxt-diag call-diag call2ctxt ctxt2call]
+  (d/multi-apply ctxt-diag
+    (fn [diag obj])
+    (for [x (keys ctxt2call)] [x])))
+
+(defn invert-mapping [m]
+  (d/multi-apply {}
+    (fn [inv-m key]
+      (d/multi-apply inv-m
+        (fn [inv-m val] (assoc inv-m val (conj (inv-m val) key)))
+        (for [x (m key)] [x])))
+    (for [x (keys m)] [x]))
+  )
 
 (defn call-stmt [ctxt-diagram unit]
   (let [method (-> unit .getInvokeExpr .getMethod)
+        return-name (if (instance? JAssignStmt unit)
+                      (-> unit .getLeftOp .getName)
+                      nil)
         call-diagram (infer-frame method)
         actuals (-> unit .getInvokeExpr .getArgs)
-        call2ctxt (compute-mappings call-diagram ctxt-diagram (call-diagram :formals))]
-    )) 
+        call2ctxt (compute-mappings call-diagram ctxt-diagram (call-diagram :formals) actuals)
+        ctxt2call (invert-mapping call2ctxt)
+        embedded-diagram (adjust-edges ctxt-diagram call-diagram call2ctxt ctxt2call)]
+    (if (= return-name nil)
+      embedded-diagram
+      (-> embedded-diagram
+        (d/remove-name return-name)
+        (d/add-name 
+          (reduce clojure.set/union
+            (for [x (call-diagram :return)] (call2ctxt x))) 
+          return-name))))) 
 
 (defn return-stmt [diagram unit]
   (let [value (-> unit .getOp)]
