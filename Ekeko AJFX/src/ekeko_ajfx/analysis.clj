@@ -196,7 +196,25 @@
 
 (defn adjust-edges [ctxt-diag call-diag call2ctxt ctxt2call]
   (d/multi-apply ctxt-diag
-    (fn [diag obj])
+    (fn [diag ctxt-obj]
+      (let [call-objs (ctxt2call ctxt-obj)
+            must-field-groups (for [x call-objs]
+                                [x (group-by
+                                     (fn [edge] (second edge))
+                                     ((call-diag :must-mod) x))])
+            ; determine the fields that *must* be modified in ctxt, iff the field in *all* corresponding objs of call are must-be-modified  
+            must-mod-fields (reduce
+                              (fn [x y]
+                                (clojure.set/intersection
+                                  (keys (second x)) (keys (second y))))
+                              must-field-groups)
+            may-field-groups (for [x call-objs]
+                               [x (group-by
+                                    (fn [edge] (second edge))
+                                    ((call-diag :may-mod) x))])
+            new-musts (d/multi-apply (ctxt-diag :must-mod)
+                        )])
+      )
     (for [x (keys ctxt2call)] [x])))
 
 (defn invert-mapping [m]
