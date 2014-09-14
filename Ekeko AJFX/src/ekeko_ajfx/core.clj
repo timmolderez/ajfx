@@ -210,14 +210,14 @@ For example, the function could return a list like this:
              (method-methodCalls ?a ?callee ?b ?recv))))
 
 (inspect
-  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
+  (let [q (ekeko [?a] (soot|method-name ?a "helper3"))
         method (first (first q))
         frame (infer-frame method)]
     frame))
 
 
 (inspect
-  (let [q (ekeko [?a] (soot|method-name ?a "helper2"))
+  (let [q (ekeko [?a] (soot|method-name ?a "helper3"))
         method (first (first q))]
     (-> method .getActiveBody)))
 

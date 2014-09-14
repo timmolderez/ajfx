@@ -43,24 +43,24 @@
      toString (fn [unit] (str (-> unit (.getTag "LineNumberTag")) ": " (.toString unit)))]
     (ekeko-visualize
       ; nodes
-     (into []
-            (map vector (map (fn [node] (toString node)) nodes))) 
-    
-    ; edges
-    (into [] (mapcat identity (map (fn [node] ; for each unit
-                                     (map (fn [succ] ; for each successor of unit
-                                            [(toString node) (toString succ)])
-                                          (-> graph (.getSuccsOf node))))
-                                   nodes)))
-    
-    :node|label
-    (fn [node] (.getText labelProvider node))
-    :node|image 
-    (fn [node] (.getImage labelProvider node))
-    :edge|style 
-    (fn [src dest] edge|directed)
-    :layout
-    layout|tree)))
+      (into []
+        (map vector (map (fn [node] (toString node)) nodes))) 
+      
+      ; edges
+      (into [] (mapcat identity (map (fn [node] ; for each unit
+                                       (map (fn [succ] ; for each successor of unit
+                                              [(toString node) (toString succ)])
+                                         (-> graph (.getSuccsOf node))))
+                                  nodes)))
+      
+      :node|label
+      (fn [node] (.getText labelProvider node))
+      :node|image 
+      (fn [node] (.getImage labelProvider node))
+      :edge|style 
+      (fn [src dest] edge|directed)
+      :layout
+      layout|tree)))
 
 (defn showBlockCFG
   "Use Ekeko's visualizer to show the block control-flow graph of a Soot Body"

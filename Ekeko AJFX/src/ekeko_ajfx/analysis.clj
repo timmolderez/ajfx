@@ -21,6 +21,8 @@
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
+(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
+
 ; Test case
 (let [diagram (-> (d/new-diagram ["a" "b" "c"])
                 (d/add-object #{"bla"})
@@ -31,18 +33,19 @@
                 (d/remove-edges :1 "g" :may-mod))]
   (dbg diagram)
   (dbg (d/find-edges diagram "a" "f" :may-mod))
-  (d/reset-obj-id)) 
+  (d/reset-obj-id))
 
 (defn infer-frame [method]
   (let [body (-> method .getActiveBody)
         units (-> body .getUnits)
-        loopTree (new LoopNestTree body)
-        diagram (d/new-diagram [])]
+        diagram (-> (d/new-diagram [])
+                  (d/add-object ["@@constant"]))]
     (infer-frame-helper diagram units (-> units .getFirst) (-> units .getLast))))
 
+;;; Intraprocedural analysis ;;;
+
 (defn infer-frame-helper [diagram units unit last-unit]
-  (let [unit-type (-> unit .getClass)
-        next (cond 
+  (let [next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
                (-> unit .containsInvokeExpr) (call-stmt unit)
@@ -56,7 +59,8 @@
         next-diagram (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
                        (first next)
                        next)]
-    (if (not (-> unit .equals last-unit))
+    (dbg next-unit) 
+    (if (not (-> unit (.equals last-unit)))
       (infer-frame-helper next-diagram units next-unit last-unit)
       next-diagram)))
 
@@ -70,22 +74,26 @@
         rhs (-> unit .getRightOp)]
     (cond
       ; Assignment type: a = new c ();
-      (instance? rhs JNewExpr) (new-stmt lhs rhs) 
+      (instance? JNewExpr rhs) (new-stmt lhs rhs) 
       ; Assignment type: a = b;
-      (and (instance? lhs JimpleLocal) (instance? rhs JimpleLocal)) (copy-stmt lhs rhs)
+      (and (instance? JimpleLocal lhs) (not (instance? JInstanceFieldRef rhs ))) (copy-stmt lhs rhs)
       ; Assignment type: a.f = b;
-      (instance? lhs JInstanceFieldRef) true
+      (instance? JInstanceFieldRef lhs) (field-write-stmt lhs rhs) 
       ; Assignment type: a = b.f;
-      (instance? rhs JInstanceFieldRef) true
+      (instance? JInstanceFieldRef rhs) (field-read-stmt lhs rhs) 
       :else (println "Unrecognized type of assignment!"))))
 
 (defn copy-stmt [diagram lhs rhs]
-  (let [lhs-name (-> lhs .toString)
-        rhs-name (-> rhs .toString)
-        rhs-occurrences (d/find-objs-by-name diagram rhs-name)]
-    (d/add-name (d/remove-name diagram lhs-name) rhs-occurrences lhs-name)))
+  "Processes an a = b; assignment"
+  (if (instance? JimpleLocal rhs)
+    (let [lhs-name (-> lhs .toString)
+          rhs-name (-> rhs .toString)
+          rhs-occurrences (d/find-objs-by-name diagram rhs-name)]
+      (d/add-name (d/remove-name diagram lhs-name) rhs-occurrences lhs-name))
+    (d/remove-name diagram (-> lhs .toString))))
 
 (defn field-read-stmt [diagram lhs rhs]
+  "Processes an a = b.f; assignment" 
   (let [lhs-name (-> lhs .toString)
         rhs-recv (-> rhs .getBase .toString)
         rhs-field (-> rhs .getField .getName)
@@ -103,9 +111,12 @@
       :else (d/add-name (for [x found-must] (second x)) lhs-name))))
 
 (defn field-write-stmt [diagram lhs rhs]
+  "Processes an a.f = b; assignment" 
   (let [lhs-recv (-> lhs .getBase .toString)
         lhs-field (-> lhs .getField .getName)
-        rhs-name (-> rhs .toString)
+        rhs-name (if (instance? JimpleLocal rhs)
+                   (-> rhs .toString)
+                   "@@constant")
         lhs-found (d/find-objs-by-name diagram lhs-recv)
         after-rm (if (= 1 (count lhs-found))
                    (-> (d/remove-edges diagram (first lhs-found) lhs-field :may-mod)
@@ -164,6 +175,14 @@
         (clojure.set/union ((diagram :may-mod) object) ((diagram :may-read) object)))
       must-found)))
 
+(defn return-stmt [diagram unit]
+  (let [value (-> unit .getOp)]
+    (if (instance? JimpleLocal value)
+      (d/add-return-val diagram (-> value .toString))
+      diagram)))
+
+;;; Interprocedural analysis ;;;
+
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
   (let [mapped-roots (d/multi-apply 
                        {}
@@ -194,40 +213,70 @@
                       (if (empty? new-objects) new-m (recur new-m new-objects))))]
     (map-objects mapped-roots (keys mapped-roots) (call-diag :may-read))))
 
-(defn map-edges [edges ctxt-src call2ctxt]
-  (mapcat identity (for [x edges]
-                     (for [y (call2ctxt (first x))]
-                       [y (second x)]
-                       ))))
-
 (defn adjust-edges [ctxt-diag call-diag call2ctxt ctxt2call]
   (d/multi-apply ctxt-diag
     (fn [ctxt-diag ctxt-obj]
       (let [call-objs (ctxt2call ctxt-obj)
-            must-field-groups (for [x call-objs]
-                                [x (group-by
-                                     (fn [edge] (second edge))
-                                     ((call-diag :must-mod) x))])
-            ; determine the fields that *must* be modified in ctxt, iff the field in *all* corresponding objs of call are must-be-modified  
-            must-mod-fields (reduce
-                              (fn [x y]
-                                (clojure.set/intersection
-                                  (keys (second x)) (keys (second y))))
-                              must-field-groups)
             
+            ; is there another object in ctxt that might map to the same object in call? (if so, we should convert must-be-modified to may-be-modified)
             is-uniq-ctxt-obj (every?
                                (fn [x] (= 1 (count (call2ctxt x))))
                                call-objs)
+            
+            map-edges (fn [edges]
+                        (set (mapcat identity (for [x edges]
+                                                (for [y (call2ctxt (first x))]
+                                                  [y (second x)])))))
+            
+            map-and-union (fn [& edge-set]
+                            (let [mapped (for [x edge-set] (map-edges x))]
+                              (reduce clojure.set/union mapped)))   
+            
+            must-field-groups (for [x call-objs]
+                                (group-by
+                                  (fn [edge] (second edge))
+                                  ((call-diag :must-mod) x)))
+            
+            ; determine the fields that *must* be modified in ctxt, iff the field in *all* corresponding objs of call are must-be-modified  
+            must-mod-fields (reduce
+                              (fn [x y] (clojure.set/intersection (keys x) (keys y)))
+                              must-field-groups)
+            
+            merged-musts (merge-with map-and-union must-field-groups)
             
             may-field-groups (for [x call-objs]
                                [x (group-by
                                     (fn [edge] (second edge))
                                     ((call-diag :may-mod) x))])
-            new-must-mods (d/multi-apply (ctxt-diag :must-mod)
-                        )
-            new-may-mods (d/multi-apply (ctxt-diag :must-mod)
-                        )])
-      )
+            merged-mays (merge-with map-and-union may-field-groups)
+            
+            adjusted-edges (d/multi-apply
+                             [((ctxt-diag :must-mod) ctxt-obj) ((ctxt-diag :may-mod) ctxt-obj)]
+                             (fn [edge-pair field]
+                               (if (and 
+                                     is-uniq-ctxt-obj
+                                     (contains? must-mod-fields field)
+                                     (not (empty? (merged-musts field))))
+                                 (let [old-musts-removed (remove
+                                                           (fn [x] (= (second x) field))
+                                                           (edge-pair first))
+                                       old-mays-removed (remove
+                                                           (fn [x] (= (second x) field))
+                                                           (edge-pair second))
+                                       new-musts (clojure.set/union old-musts-removed (merged-musts field))
+                                       new-mays (clojure.set/union old-mays-removed (merged-mays field))]
+                                   [new-musts new-mays])
+                                 (let [new-mays (clojure.set/union (edge-pair second) (merged-mays field) (merged-musts field))]
+                                   [(edge-pair first) new-mays])))
+                             (for [x (clojure.set/union 
+                                       (set (keys merged-musts))
+                                       (set (keys merged-mays)))] [x]))
+            
+            new-musts (assoc (ctxt-diag :must-mod) ctxt-obj (adjusted-edges first))
+            new-mays (assoc (ctxt-diag :may-mod) ctxt-obj (adjusted-edges second))]
+        (-> ctxt-diag
+          (assoc :must-mod new-musts)
+          (assoc :may-mod new-mays))))
     (for [x (keys ctxt2call)] [x])))
 
 (defn invert-mapping [m]
@@ -257,9 +306,3 @@
           (reduce clojure.set/union
             (for [x (call-diagram :return)] (call2ctxt x))) 
           return-name))))) 
-
-(defn return-stmt [diagram unit]
-  (let [value (-> unit .getOp)]
-    (if (instance? JimpleLocal)
-      (d/add-return-val diagram (-> value .toString))
-      diagram)))
