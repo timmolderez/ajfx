@@ -176,7 +176,7 @@
                          (fn [x] (.startsWith x "@"))
                          (keys (call-diag :names))))
         
-        map-edges (fn [m objects]
+        map-objects (fn [m objects]
                     (let [call-obj (first objects)
                           ctxt-objs (m call-obj)
                           read-edges ((call-diag :may-read) call-obj)
@@ -192,11 +192,17 @@
                                               (first x))))))
                                   read-edges)]
                       (if (empty? new-objects) new-m (recur new-m new-objects))))]
-    (map-edges mapped-roots (keys mapped-roots) (call-diag :may-read))))
+    (map-objects mapped-roots (keys mapped-roots) (call-diag :may-read))))
+
+(defn map-edges [edges ctxt-src call2ctxt]
+  (mapcat identity (for [x edges]
+                     (for [y (call2ctxt (first x))]
+                       [y (second x)]
+                       ))))
 
 (defn adjust-edges [ctxt-diag call-diag call2ctxt ctxt2call]
   (d/multi-apply ctxt-diag
-    (fn [diag ctxt-obj]
+    (fn [ctxt-diag ctxt-obj]
       (let [call-objs (ctxt2call ctxt-obj)
             must-field-groups (for [x call-objs]
                                 [x (group-by
@@ -208,11 +214,18 @@
                                 (clojure.set/intersection
                                   (keys (second x)) (keys (second y))))
                               must-field-groups)
+            
+            is-uniq-ctxt-obj (every?
+                               (fn [x] (= 1 (count (call2ctxt x))))
+                               call-objs)
+            
             may-field-groups (for [x call-objs]
                                [x (group-by
                                     (fn [edge] (second edge))
                                     ((call-diag :may-mod) x))])
-            new-musts (d/multi-apply (ctxt-diag :must-mod)
+            new-must-mods (d/multi-apply (ctxt-diag :must-mod)
+                        )
+            new-may-mods (d/multi-apply (ctxt-diag :must-mod)
                         )])
       )
     (for [x (keys ctxt2call)] [x])))
