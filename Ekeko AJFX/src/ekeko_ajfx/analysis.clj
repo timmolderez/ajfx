@@ -8,7 +8,7 @@
     [ekeko-ajfx.diagram :as d])
   (:import 
     [soot.jimple IdentityStmt]
-    [soot.jimple.internal JimpleLocal JInvokeStmt JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr]
+    [soot.jimple.internal JimpleLocal JInvokeStmt JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr JTableSwitchStmt]
     [soot.jimple ThisRef ParameterRef ReturnStmt]
     [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]
     [org.aspectj.lang Signature]
@@ -22,6 +22,8 @@
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
 (defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
+
+(d/reset-obj-id)
 
 ; Test case
 (let [diagram (-> (d/new-diagram ["a" "b" "c"])
@@ -48,9 +50,10 @@
   (let [next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
-               (-> unit .containsInvokeExpr) (call-stmt unit)
+               (-> unit .containsInvokeExpr) (call-stmt diagram unit)
                (instance? JGotoStmt unit) (loop-stmt diagram unit units) 
-               (instance? JIfStmt unit) (if-stmt diagram unit units) 
+               (instance? JIfStmt unit) (if-stmt diagram unit units)
+               (instance? JTableSwitchStmt unit) diagram ; TODO
                (instance? ReturnStmt unit) (return-stmt diagram unit) 
                :else diagram)
         next-unit (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
@@ -74,13 +77,13 @@
         rhs (-> unit .getRightOp)]
     (cond
       ; Assignment type: a = new c ();
-      (instance? JNewExpr rhs) (new-stmt lhs rhs) 
+      (instance? JNewExpr rhs) (new-stmt diagram lhs rhs) 
       ; Assignment type: a = b;
-      (and (instance? JimpleLocal lhs) (not (instance? JInstanceFieldRef rhs ))) (copy-stmt lhs rhs)
+      (and (instance? JimpleLocal lhs) (not (instance? JInstanceFieldRef rhs ))) (copy-stmt diagram lhs rhs)
       ; Assignment type: a.f = b;
-      (instance? JInstanceFieldRef lhs) (field-write-stmt lhs rhs) 
+      (instance? JInstanceFieldRef lhs) (field-write-stmt diagram lhs rhs) 
       ; Assignment type: a = b.f;
-      (instance? JInstanceFieldRef rhs) (field-read-stmt lhs rhs) 
+      (instance? JInstanceFieldRef rhs) (field-read-stmt diagram lhs rhs) 
       :else (println "Unrecognized type of assignment!"))))
 
 (defn copy-stmt [diagram lhs rhs]
@@ -103,12 +106,12 @@
         found-may (d/find-edges after-rm rhs-recv rhs-field :may-mod)
         found-must (d/find-edges after-rm rhs-recv rhs-field :must-mod)]
     (cond
-      (empty? found-read) (d/add-edges-to-new-object diagram rhs-recv rhs-field :may-read lhs-name)
+      (empty? found-read) (d/add-edges-to-new-object after-rm rhs-recv rhs-field :may-read lhs-name)
       (empty? found-must) (let [tgts (clojure.set/union 
-                                       (for [x found-read] (second x)) 
-                                       (for [x found-may] (second x)))]
-                            (d/add-name tgts lhs-name))
-      :else (d/add-name (for [x found-must] (second x)) lhs-name))))
+                                       (set (for [x found-read] (second x))) 
+                                       (set (for [x found-may] (second x))))]
+                            (d/add-name after-rm tgts lhs-name))
+      :else (d/add-name after-rm (set (for [x found-must] (second x))) lhs-name))))
 
 (defn field-write-stmt [diagram lhs rhs]
   "Processes an a.f = b; assignment" 
@@ -140,7 +143,7 @@
     (d/add-object diagram [obj-name] (d/remove-name diagram lhs-name))))
 
 (defn if-stmt [diagram unit units]
-  (let [begin-else (-> unit .getTarget)
+  (let [begin-else (dbg (-> unit .getTarget))
         end-if (-> units (.getPredOf begin-else))
         end-else (if (instance? JGotoStmt end-if)
                    (-> end-if .getTarget)
@@ -149,7 +152,7 @@
         else-diagram (if (= nil end-else)
                        diagram
                        (infer-frame-helper diagram units begin-else (-> units (.getPredOf end-else))))
-        merged-diagram (d/merge-diagrams if-diagram else-diagram)
+        merged-diagram (d/merge-diagrams (dbg if-diagram) (dbg else-diagram))
         next-unit (if (= nil end-else)
                        begin-else
                        end-else)]

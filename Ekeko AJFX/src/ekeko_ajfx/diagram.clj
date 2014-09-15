@@ -136,7 +136,7 @@
     ; Note that we don't need to call add-object since the new objects are nameless..
     (add-name
       (assoc diagram kind (add-edges-helper (diagram kind) source-ids new-ids))
-      new-ids target-name)))
+      (set new-ids) target-name)))
 
 (defn remove-edges [diagram source-id label kind]
   "Remove the edges starting at a given object, with a given label"
@@ -206,7 +206,9 @@
         ))
     (for [x (clojure.set/union (set (keys one)) (set (keys two)))] [x])))
 
-(intersect-edges {:1 #{[:4 "f"] [:3 "g"] [:4 "g"] [:5 "h"]} :2 #{[:1 "f"] [:3 "g"]}} {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})
+(intersect-edges
+  {:1 #{[:4 "f"] [:3 "g"] [:4 "g"] [:5 "h"]} :2 #{[:1 "f"] [:3 "g"]}} 
+  {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})
 
 (defn merge-diagrams [d1 d2]
   (let [new-diag (new-diagram [])
@@ -216,28 +218,12 @@
                                new-val ((d2 :names) key)]
                            (assoc names-map key (clojure.set/union old-val new-val))))
                        (for [x (keys (d2 :names))] [x]))
-;        merged-names (multi-apply 
-;                       merged
-;                       add-name 
-;                       (for [x (keys (d2 :names))]
-;                         [((d2 :names) x) (name x)]))
         merged-reads (union-edges (d1 :may-read) (d2 :may-read))
         intersect (intersect-edges (d1 :must-mod) (d2 :must-mod))
         merged-musts (first intersect)
         merged-mays (union-edges 
                       (union-edges (d1 :may-mod) (d2 :may-mod)) 
-                      (second intersect)) 
-
-;        new-name-helper (fn [diag d2keys]
-;                          (if (empty? d2keys)
-;                            diag
-;                            (recur 
-;                              (add-name diag 
-;                                (d2 :names (first d2keys))
-;                                (name (first d2keys)))
-;                              (rest d2keys))))
-;        merged-names (new-name-helper merged (keys (d2 :names)))
-        ]
+                      (second intersect))]
     (-> (new-diagram []) 
       (assoc :names merged-names)
       (assoc :formals (d1 :formals)) 
