@@ -188,16 +188,20 @@
 ;;; Interprocedural analysis ;;;
 
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
-  (let [mapped-roots (d/multi-apply 
+  (dbg formals) 
+  (let [
+        mapped-roots (d/multi-apply 
                        {}
-                       (fn [m root]
-                         (let [index (.indexOf formals (subs root 1))]
+                       (fn [m root] 
+                         (let [index (.indexOf formals (subs (name root) 1))]
                            (if (not= index -1)
-                             (assoc m (first ((call-diag :names) root)) ((ctxt-diag :names) (nth actuals index)))
+                             (assoc m (first ((call-diag :names) root)) ((ctxt-diag :names) (nth (dbg actuals) index)))
                              (assoc m (first ((call-diag :names) root)) #{(d/new-obj-id)}))))
-                       (filter
-                         (fn [x] (.startsWith (name x) "@"))
-                         (keys (call-diag :names))))
+                       (for [x (filter
+                                 (fn [x] (-> (name x) (.startsWith  "@")))
+                                 (keys (call-diag :names)))] [x]))
+        
+        
         
         map-objects (fn [m objects]
                     (let [call-obj (first objects)
