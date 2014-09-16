@@ -47,7 +47,8 @@
 ;;; Intraprocedural analysis ;;;
 
 (defn infer-frame-helper [diagram units unit last-unit]
-  (let [next (cond 
+  (let [dbg (dbg unit)
+        next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
                (-> unit .containsInvokeExpr) (call-stmt diagram unit)
@@ -62,7 +63,6 @@
         next-diagram (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
                        (first next)
                        next)]
-    (dbg next-unit) 
     (if (not (-> unit (.equals last-unit)))
       (infer-frame-helper next-diagram units next-unit last-unit)
       next-diagram)))
@@ -143,19 +143,20 @@
     (d/add-object diagram [obj-name] (d/remove-name diagram lhs-name))))
 
 (defn if-stmt [diagram unit units]
-  (let [begin-else (dbg (-> unit .getTarget))
+  (let [begin-else (-> unit .getTarget)
         end-if (-> units (.getPredOf begin-else))
-        end-else (if (instance? JGotoStmt end-if)
-                   (-> end-if .getTarget)
-                   nil)
-        if-diagram (infer-frame-helper diagram units (-> units (.getSuccOf unit)) (-> units (.getPredOf end-if)))
-        else-diagram (if (= nil end-else)
-                       diagram
-                       (infer-frame-helper diagram units begin-else (-> units (.getPredOf end-else))))
-        merged-diagram (d/merge-diagrams (dbg if-diagram) (dbg else-diagram))
-        next-unit (if (= nil end-else)
-                       begin-else
-                       end-else)]
+        has-else (dbg (instance? JGotoStmt end-if))
+        end-else (if has-else (-> end-if .getTarget) nil)
+        if-diagram (infer-frame-helper diagram units 
+                         (-> units (.getSuccOf unit))
+                         (if has-else 
+                           (-> units (.getPredOf end-if))
+                           end-if))
+        else-diagram (if has-else
+                       (infer-frame-helper diagram units begin-else (dbg (-> units (.getPredOf end-else))))
+                           diagram)
+        merged-diagram (d/merge-diagrams if-diagram else-diagram)
+        next-unit (dbg (if has-else end-else begin-else))]
     [merged-diagram next-unit]))
 
 (defn loop-stmt [diagram unit units]
