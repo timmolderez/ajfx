@@ -33,8 +33,7 @@
                 (d/add-edges "d" "g" :may-mod "c")
                 (d/add-edges-to-new-object "d" "h" :must-mod "z")
                 (d/remove-edges :1 "g" :may-mod))]
-  (dbg diagram)
-  (dbg (d/find-edges diagram "a" "f" :may-mod))
+  (d/find-edges diagram "a" "f" :may-mod)
   (d/reset-obj-id))
 
 (defn infer-frame [method]
@@ -42,11 +41,11 @@
         units (-> body .getUnits)
         diagram (-> (d/new-diagram [])
                   (d/add-object ["@@constant"]))]
-    (infer-frame-helper diagram units (-> units .getFirst) (-> units .getLast))))
+    (infer-frame-helper diagram units (-> units .getFirst) nil)))
 
 ;;; Intraprocedural analysis ;;;
 
-(defn infer-frame-helper [diagram units unit last-unit]
+(defn infer-frame-helper [diagram units unit end-unit]
   (let [dbg (dbg unit)
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
@@ -63,8 +62,8 @@
         next-diagram (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
                        (first next)
                        next)]
-    (if (not (-> unit (.equals last-unit)))
-      (infer-frame-helper next-diagram units next-unit last-unit)
+    (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
+      (infer-frame-helper next-diagram units next-unit end-unit)
       next-diagram)))
 
 (defn identity-stmt [diagram unit]
@@ -140,33 +139,34 @@
   (let [cls-name (-> rhs .getType .toString)
         lhs-name (-> lhs .toString)
         obj-name (str "@" cls-name (new-id))]
-    (d/add-object diagram [obj-name] (d/remove-name diagram lhs-name))))
+    (d/add-object (d/remove-name diagram lhs-name) [obj-name])))
 
 (defn if-stmt [diagram unit units]
   (let [begin-else (-> unit .getTarget)
         end-if (-> units (.getPredOf begin-else))
-        has-else (dbg (instance? JGotoStmt end-if))
+        has-else (instance? JGotoStmt end-if)
         end-else (if has-else (-> end-if .getTarget) nil)
-        if-diagram (infer-frame-helper diagram units 
+        if-diagram (infer-frame-helper diagram units
                          (-> units (.getSuccOf unit))
-                         (if has-else 
-                           (-> units (.getPredOf end-if))
-                           end-if))
+                         (if has-else
+                           end-if
+                           (-> units (.getSuccOf end-if))))
         else-diagram (if has-else
-                       (infer-frame-helper diagram units begin-else (dbg (-> units (.getPredOf end-else))))
-                           diagram)
+                       (infer-frame-helper diagram units begin-else end-else)
+                       diagram)
         merged-diagram (d/merge-diagrams if-diagram else-diagram)
-        next-unit (dbg (if has-else end-else begin-else))]
+        next-unit (if has-else end-else begin-else)]
     [merged-diagram next-unit]))
 
 (defn loop-stmt [diagram unit units]
   (let [end-loop (-> unit .getTarget)
-        merged-diagram (d/multi-apply diagram
+        merged-diagram (d/multi-apply 
+                         diagram
                          (fn [diagram]
                            (infer-frame-helper diagram units 
                              (-> units (.getSuccOf unit)) 
-                             (-> units (.getPredOf end-loop))))
-                         [[] [] []])]
+                             end-loop))
+                         [[] [] [] []])]
     [merged-diagram (-> units (.getSuccOf end-loop))]))
 
 (defn cur-value [diagram object field]
@@ -196,7 +196,7 @@
                              (assoc m (first ((call-diag :names) root)) ((ctxt-diag :names) (nth actuals index)))
                              (assoc m (first ((call-diag :names) root)) #{(d/new-obj-id)}))))
                        (filter
-                         (fn [x] (.startsWith x "@"))
+                         (fn [x] (.startsWith (name x) "@"))
                          (keys (call-diag :names))))
         
         map-objects (fn [m objects]
@@ -289,8 +289,7 @@
       (d/multi-apply inv-m
         (fn [inv-m val] (assoc inv-m val (conj (inv-m val) key)))
         (for [x (m key)] [x])))
-    (for [x (keys m)] [x]))
-  )
+    (for [x (keys m)] [x])))
 
 (defn call-stmt [ctxt-diagram unit]
   (let [method (-> unit .getInvokeExpr .getMethod)

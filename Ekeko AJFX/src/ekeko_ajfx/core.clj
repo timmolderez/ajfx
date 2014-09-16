@@ -215,6 +215,7 @@ For example, the function could return a list like this:
         frame (infer-frame method)]
     frame))
 
+(inspect (clojure.stacktrace/root-cause *e))
 
 (inspect
   (let [q (ekeko [?a] (soot|method-name ?a "helper3"))
