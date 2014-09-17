@@ -36,12 +36,25 @@
   (d/find-edges diagram "a" "f" :may-mod)
   (d/reset-obj-id))
 
+; This global set contains all methods for which the analysis was initiated, but not yet finished (in order to detect recursive calls)
+(def started-analysis (new java.util.HashSet))
+(-> started-analysis .clear)
+
 (defn infer-frame [method]
   (let [body (-> method .getActiveBody)
         units (-> body .getUnits)
         diagram (-> (d/new-diagram [])
                   (d/add-object ["@@constant"]))]
-    (infer-frame-helper diagram units (-> units .getFirst) nil)))
+    (println "Analysing method:" method)
+    (if (-> started-analysis (.contains method))
+      (let [] 
+        (println "recursive call!" method)
+        diagram)
+      (let []
+        (-> started-analysis (.add method))
+        (let [frame (infer-frame-helper diagram units (-> units .getFirst) nil)]
+          (-> started-analysis (.remove method))
+          frame)))))
 
 ;;; Intraprocedural analysis ;;;
 
@@ -188,14 +201,16 @@
 ;;; Interprocedural analysis ;;;
 
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
-  (dbg formals) 
   (let [
         mapped-roots (d/multi-apply 
                        {}
                        (fn [m root] 
                          (let [index (.indexOf formals (subs (name root) 1))]
+                           (dbg index) 
                            (if (not= index -1)
-                             (assoc m (first ((call-diag :names) root)) ((ctxt-diag :names) (nth (dbg actuals) index)))
+                             (assoc m 
+                               (first ((call-diag :names) root)) 
+                               ((ctxt-diag :names) (keyword (-> (nth actuals index) .toString)))) ; TODO, can we accidentally map to something in case of a constant actual?
                              (assoc m (first ((call-diag :names) root)) #{(d/new-obj-id)}))))
                        (for [x (filter
                                  (fn [x] (-> (name x) (.startsWith  "@")))
@@ -204,25 +219,28 @@
         
         
         map-objects (fn [m objects]
-                    (let [call-obj (first objects)
-                          ctxt-objs (m call-obj)
-                          read-edges ((call-diag :may-read) call-obj)
-                          new-objects (concat
-                                        (rest objects)
-                                        (for [x read-edges] (first x)))
-                          new-m (d/multi-apply m
-                                  (fn [m call-tgt label]
-                                    (let [ctxt-edges (reduce clojure.set/union
-                                                       (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
-                                      (assoc m call-tgt
-                                        (set (for [x ctxt-objs]
-                                              (first x))))))
-                                  read-edges)]
-                      (if (empty? new-objects) new-m (recur new-m new-objects))))]
-    (map-objects mapped-roots (keys mapped-roots) (call-diag :may-read))))
+                      (let [call-obj (first objects)
+                            ctxt-objs (m call-obj)
+                            read-edges ((call-diag :may-read) call-obj)
+                            new-objects (concat
+                                          (rest objects)
+                                          (for [x read-edges] (first x)))
+                            new-m (d/multi-apply m
+                                    (fn [m call-tgt label]
+                                      (let [ctxt-edges (reduce clojure.set/union
+                                                         (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
+                                        (assoc m call-tgt
+                                          (set (for [x ctxt-edges]
+                                                 (first x))))))
+                                    read-edges)]
+                        (if (empty? new-objects) new-m (recur new-m new-objects))))]
+    (dbg call-diag)
+    (dbg ctxt-diag) 
+    (dbg (map-objects (dbg mapped-roots) (keys mapped-roots)))))
 
 (defn adjust-edges [ctxt-diag call-diag call2ctxt ctxt2call]
-  (d/multi-apply ctxt-diag
+  (d/multi-apply 
+    ctxt-diag
     (fn [ctxt-diag ctxt-obj]
       (let [call-objs (ctxt2call ctxt-obj)
             
@@ -301,9 +319,10 @@
                       (-> unit .getLeftOp .getName)
                       nil)
         call-diagram (infer-frame method)
-        actuals (-> unit .getInvokeExpr .getArgs)
+        actuals (concat [(-> unit .getInvokeExpr .getBase) ; receiver object, which you can also consider an (implicit) actual argument
+                         (-> unit .getInvokeExpr .getArgs)]) ; actual arguments
         call2ctxt (compute-mappings call-diagram ctxt-diagram (call-diagram :formals) actuals)
-        ctxt2call (invert-mapping call2ctxt)
+        ctxt2call (dbg (invert-mapping call2ctxt))
         embedded-diagram (adjust-edges ctxt-diagram call-diagram call2ctxt ctxt2call)]
     (if (= return-name nil)
       embedded-diagram
