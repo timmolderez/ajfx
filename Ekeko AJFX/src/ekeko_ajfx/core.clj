@@ -209,12 +209,15 @@ For example, the function could return a list like this:
              (soot|method-name ?a "helperMethod")
              (method-methodCalls ?a ?callee ?b ?recv))))
 
+;;;;;;;;;;;;;;;
 (ekeko-ajfx.diagram/reset-obj-id)
 (-> ekeko-ajfx.analysis/started-analysis .clear)
 (let [q (ekeko [?a] (soot|method-name ?a "helper3"))
         method (first (first q))
         frame (infer-frame method)]
     frame)
+;;;;;;;;;;;;;;
+
 
 (inspect (clojure.stacktrace/root-cause *e))
 

@@ -8,7 +8,7 @@
     [ekeko-ajfx.diagram :as d])
   (:import 
     [soot.jimple IdentityStmt]
-    [soot.jimple.internal JimpleLocal JInvokeStmt JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr JTableSwitchStmt]
+    [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr JTableSwitchStmt]
     [soot.jimple ThisRef ParameterRef ReturnStmt]
     [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]
     [org.aspectj.lang Signature]
@@ -21,7 +21,7 @@
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
-(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
+(defmacro dbg[x] `(let [x# ~x] (println " dbg:" '~x "=" x#) x#))
 
 (d/reset-obj-id)
 
@@ -201,12 +201,11 @@
 ;;; Interprocedural analysis ;;;
 
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
-  (let [
+  (let [tmp (dbg [formals actuals])
         mapped-roots (d/multi-apply 
                        {}
                        (fn [m root] 
                          (let [index (.indexOf formals (subs (name root) 1))]
-                           (dbg index) 
                            (if (not= index -1)
                              (assoc m 
                                (first ((call-diag :names) root)) 
@@ -215,17 +214,6 @@
                        (for [x (filter
                                  (fn [x] (-> (name x) (.startsWith  "@")))
                                  (keys (call-diag :names)))] [x]))
-        
-;        map-ctxt-edges (fn [pair call-tgt label]
-;                         (let [m (first pair)
-;                               ctxt-reads (second pair)
-;                               ctxt-objs (m call-obj)
-;                               
-;                               ctxt-edges (reduce clojure.set/union
-;                                            (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
-;                           (assoc m call-tgt
-;                             (set (for [x ctxt-edges]
-;                                    (first x))))))
         
         map-objects (fn [pair objects]
                       (let [m (first pair)
@@ -252,37 +240,19 @@
                                                  ; Is there a corresponding object in ctxt? If not, create it by adding a new read edge.
                                                  (if (empty? new-val)
                                                    [(assoc m call-tgt (clojure.set/union cur-val #{new-read-tgt} 
-                                                                      (for [x new-val] (first x))))
+                                                                        (for [x new-val] (first x))))
                                                     (assoc ctxt-reads ctxt-obj [new-read-tgt label])]
                                                    [(assoc m call-tgt (clojure.set/union 
-                                                                      cur-val
-                                                                      (for [x new-val] (first x))))
+                                                                        cur-val
+                                                                        (for [x new-val] (first x))))
                                                     ctxt-reads]
                                                    )))
-                                             (for [x ctxt-objs] [x]))
-                                           
-                                           
-
-;                                           (assoc m call-tgt
-;                                             (set (for [x ctxt-edges]
-;                                                    (first x))))
-                                           ))
-                                       read-edges)
-                            
-                            new-m (d/multi-apply m
-                                    (fn [m call-tgt label]
-                                      (let [ctxt-edges (reduce clojure.set/union
-                                                         (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
-                                        (assoc m call-tgt
-                                          (set (for [x ctxt-edges]
-                                                 (first x))))))
-                                    read-edges)]
+                                             (for [x ctxt-objs] [x]))))
+                                       read-edges)]
                         (if (empty? new-objects) 
-                  [new-m ctxt-reads] 
-                  (recur [new-m ctxt-reads] new-objects))))]
-    (dbg call-diag)
-    (dbg ctxt-diag) 
-    (dbg (map-objects (dbg mapped-roots) (keys mapped-roots)))))
+                          new-pair
+                          (recur new-pair new-objects))))] 
+    (map-objects [mapped-roots (ctxt-diag :may-read)] (keys mapped-roots))))
 
 (defn adjust-edges [ctxt-diag call-diag call2ctxt ctxt2call]
   (d/multi-apply 
@@ -290,7 +260,8 @@
     (fn [ctxt-diag ctxt-obj]
       (let [call-objs (ctxt2call ctxt-obj)
             
-            ; is there another object in ctxt that might map to the same object in call? (if so, we should convert must-be-modified to may-be-modified)
+            ; Is there another object in ctxt that might map to the same object in call? 
+            ; (If so, we should convert must-be-modified edges to may-be-modified)
             is-uniq-ctxt-obj (every?
                                (fn [x] (= 1 (count (call2ctxt x))))
                                call-objs)
@@ -309,18 +280,19 @@
                                   (fn [edge] (second edge))
                                   ((call-diag :must-mod) x)))
             
-            ; determine the fields that *must* be modified in ctxt, iff the field in *all* corresponding objs of call are must-be-modified  
+            ; Determine the fields that *must* be modified in ctxt, iff the field in *all* corresponding objs of call are must-be-modified  
             must-mod-fields (reduce
                               (fn [x y] (clojure.set/intersection (keys x) (keys y)))
                               must-field-groups)
             
-            merged-musts (merge-with map-and-union must-field-groups)
+            merged-musts (apply merge-with map-and-union must-field-groups)
             
             may-field-groups (for [x call-objs]
-                               [x (group-by
-                                    (fn [edge] (second edge))
-                                    ((call-diag :may-mod) x))])
-            merged-mays (merge-with map-and-union may-field-groups)
+                               (group-by
+                                 (fn [edge] (second edge))
+                                 ((call-diag :may-mod) x)))
+            
+            merged-mays (apply merge-with map-and-union may-field-groups)
             
             adjusted-edges (d/multi-apply
                              [((ctxt-diag :must-mod) ctxt-obj) ((ctxt-diag :may-mod) ctxt-obj)]
@@ -331,10 +303,10 @@
                                      (not (empty? (merged-musts field))))
                                  (let [old-musts-removed (remove
                                                            (fn [x] (= (second x) field))
-                                                           (edge-pair first))
+                                                           (first edge-pair))
                                        old-mays-removed (remove
                                                            (fn [x] (= (second x) field))
-                                                           (edge-pair second))
+                                                           (second edge-pair))
                                        new-musts (clojure.set/union old-musts-removed (merged-musts field))
                                        new-mays (clojure.set/union old-mays-removed (merged-mays field))]
                                    [new-musts new-mays])
@@ -344,32 +316,38 @@
                                        (set (keys merged-musts))
                                        (set (keys merged-mays)))] [x]))
             
-            new-musts (assoc (ctxt-diag :must-mod) ctxt-obj (adjusted-edges first))
-            new-mays (assoc (ctxt-diag :may-mod) ctxt-obj (adjusted-edges second))]
+            new-musts (assoc (ctxt-diag :must-mod) ctxt-obj (first adjusted-edges))
+            new-mays (assoc (ctxt-diag :may-mod) ctxt-obj (second adjusted-edges))]
         (-> ctxt-diag
           (assoc :must-mod new-musts)
           (assoc :may-mod new-mays))))
     (for [x (keys ctxt2call)] [x])))
 
 (defn invert-mapping [m]
+  ; For each key in m
   (d/multi-apply {}
     (fn [inv-m key]
+      ; For each value of key
       (d/multi-apply inv-m
-        (fn [inv-m val] (assoc inv-m val (conj (inv-m val) key)))
+        (fn [inv-m val] 
+          (assoc inv-m val (conj (inv-m val) key)))
         (for [x (m key)] [x])))
     (for [x (keys m)] [x])))
 
 (defn call-stmt [ctxt-diagram unit]
-  (let [method (-> unit .getInvokeExpr .getMethod)
+  (let [method (dbg (-> unit .getInvokeExpr .getMethod))
         return-name (if (instance? JAssignStmt unit)
                       (-> unit .getLeftOp .getName)
                       nil)
         call-diagram (infer-frame method)
-        actuals (concat [(-> unit .getInvokeExpr .getBase) ; receiver object, which you can also consider an (implicit) actual argument
+        actuals (concat [(if (not (instance? JStaticInvokeExpr (-> unit .getInvokeExpr)))
+                           (-> unit .getInvokeExpr .getBase)) ; receiver object, which you can also consider an (implicit) actual argument 
                          (-> unit .getInvokeExpr .getArgs)]) ; actual arguments
-        call2ctxt (compute-mappings call-diagram ctxt-diagram (call-diagram :formals) actuals)
-        ctxt2call (dbg (invert-mapping call2ctxt))
-        embedded-diagram (adjust-edges ctxt-diagram call-diagram call2ctxt ctxt2call)]
+        mapping-results (compute-mappings call-diagram ctxt-diagram (call-diagram :formals) actuals)
+        call2ctxt (first mapping-results)
+        new-ctxt-diagram (assoc ctxt-diagram :may-read (second mapping-results)) 
+        ctxt2call (invert-mapping call2ctxt)
+        embedded-diagram (adjust-edges new-ctxt-diagram call-diagram call2ctxt ctxt2call)]
     (if (= return-name nil)
       embedded-diagram
       (-> embedded-diagram
