@@ -216,15 +216,59 @@
                                  (fn [x] (-> (name x) (.startsWith  "@")))
                                  (keys (call-diag :names)))] [x]))
         
+;        map-ctxt-edges (fn [pair call-tgt label]
+;                         (let [m (first pair)
+;                               ctxt-reads (second pair)
+;                               ctxt-objs (m call-obj)
+;                               
+;                               ctxt-edges (reduce clojure.set/union
+;                                            (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
+;                           (assoc m call-tgt
+;                             (set (for [x ctxt-edges]
+;                                    (first x))))))
         
-        
-        map-objects (fn [m objects]
-                      (let [call-obj (first objects)
+        map-objects (fn [pair objects]
+                      (let [m (first pair)
+                            ctxt-reads (second pair)
+                            
+                            call-obj (first objects)
                             ctxt-objs (m call-obj)
                             read-edges ((call-diag :may-read) call-obj)
                             new-objects (concat
                                           (rest objects)
                                           (for [x read-edges] (first x)))
+                            
+                            new-pair (d/multi-apply pair
+                                       (fn [pair call-tgt label]
+                                         (let [ctxt-edges (reduce clojure.set/union
+                                                            (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
+                                           (d/multi-apply pair
+                                             (fn [pair ctxt-obj]
+                                               (let [m (first pair)
+                                                     ctxt-reads (second pair)
+                                                     cur-val (m call-tgt)
+                                                     new-val (cur-value ctxt-diag ctxt-obj label)
+                                                     new-read-tgt (keyword (str (name ctxt-obj) label))]
+                                                 ; Is there a corresponding object in ctxt? If not, create it by adding a new read edge.
+                                                 (if (empty? new-val)
+                                                   [(assoc m call-tgt (clojure.set/union cur-val #{new-read-tgt} 
+                                                                      (for [x new-val] (first x))))
+                                                    (assoc ctxt-reads ctxt-obj [new-read-tgt label])]
+                                                   [(assoc m call-tgt (clojure.set/union 
+                                                                      cur-val
+                                                                      (for [x new-val] (first x))))
+                                                    ctxt-reads]
+                                                   )))
+                                             (for [x ctxt-objs] [x]))
+                                           
+                                           
+
+;                                           (assoc m call-tgt
+;                                             (set (for [x ctxt-edges]
+;                                                    (first x))))
+                                           ))
+                                       read-edges)
+                            
                             new-m (d/multi-apply m
                                     (fn [m call-tgt label]
                                       (let [ctxt-edges (reduce clojure.set/union
@@ -233,7 +277,9 @@
                                           (set (for [x ctxt-edges]
                                                  (first x))))))
                                     read-edges)]
-                        (if (empty? new-objects) new-m (recur new-m new-objects))))]
+                        (if (empty? new-objects) 
+                  [new-m ctxt-reads] 
+                  (recur [new-m ctxt-reads] new-objects))))]
     (dbg call-diag)
     (dbg ctxt-diag) 
     (dbg (map-objects (dbg mapped-roots) (keys mapped-roots)))))
