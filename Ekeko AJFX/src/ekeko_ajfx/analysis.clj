@@ -6,9 +6,11 @@
     [inspector-jay.core])
   (:require 
     [ekeko-ajfx.diagram :as d])
-  (:import 
-    [soot.jimple IdentityStmt]
-    [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr JTableSwitchStmt]
+  (:import
+    [java.util HashSet]
+    [soot SootMethod Unit PatchingChain] 
+    [soot.jimple IdentityStmt Stmt]
+    [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr JTableSwitchStmt JIdentityStmt]
     [soot.jimple ThisRef ParameterRef ReturnStmt]
     [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]
     [org.aspectj.lang Signature]
@@ -26,26 +28,35 @@
 (d/reset-obj-id)
 
 ; Test case
-(let [diagram (-> (d/new-diagram ["a" "b" "c"])
-                (d/add-object #{"bla"})
-                (d/add-name #{:1 :2} "d") 
-                (d/add-edges "a" "f" :may-mod "b")
-                (d/add-edges "d" "g" :may-mod "c")
-                (d/add-edges-to-new-object "d" "h" :must-mod "z")
-                (d/remove-edges :1 "g" :may-mod))]
-  (d/find-edges diagram "a" "f" :may-mod)
-  (d/reset-obj-id))
+;(let [diagram (-> (d/new-diagram ["a" "b" "c"])
+;                (d/add-object #{"bla"})
+;                (d/add-name #{:1 :2} "d") 
+;                (d/add-edges "a" "f" :may-mod "b")
+;                (d/add-edges "d" "g" :may-mod "c")
+;                (d/add-edges-to-new-object "d" "h" :must-mod "z")
+;                (d/remove-edges :1 "g" :may-mod))]
+;  (d/find-edges diagram "a" "f" :may-mod)
+;  (d/reset-obj-id))
 
 ; This global set contains all methods for which the analysis was initiated, but not yet finished (in order to detect recursive calls)
-(def started-analysis (new java.util.HashSet))
+(def ^HashSet started-analysis (new java.util.HashSet))
 (-> started-analysis .clear)
 
-(defn infer-frame [method]
+(defn infer-frame [^SootMethod method]
+  "Infer the aliasing diagram of a given method body
+   (from which you can determine the body's frame condition)"
+  (if (-> method .hasActiveBody)
+    (infer-frame-from-scratch method)
+    (let []
+      (println "!! No body for method " method)
+      (d/new-diagram []))))
+
+(defn infer-frame-from-scratch [^SootMethod method]
+  (println "Analysing method:" method)
   (let [body (-> method .getActiveBody)
         units (-> body .getUnits)
         diagram (-> (d/new-diagram [])
                   (d/add-object ["@@constant"]))]
-    (println "Analysing method:" method)
     (if (-> started-analysis (.contains method))
       (let [] 
         (println "recursive call!" method)
@@ -58,7 +69,7 @@
 
 ;;; Intraprocedural analysis ;;;
 
-(defn infer-frame-helper [diagram units unit end-unit]
+(defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
   (let [dbg (dbg unit)
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
@@ -67,19 +78,20 @@
                (instance? JGotoStmt unit) (loop-stmt diagram unit units) 
                (instance? JIfStmt unit) (if-stmt diagram unit units)
                (instance? JTableSwitchStmt unit) diagram ; TODO
-               (instance? ReturnStmt unit) (return-stmt diagram unit) 
+ (instance? ReturnStmt unit) (return-stmt diagram unit) 
                :else diagram)
-        next-unit (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
+        ^Stmt next-unit (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
                     (second next)
                     (-> units (.getSuccOf unit)))
         next-diagram (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
                        (first next)
-                       next)]
+                       next)
+        tmp (println next-diagram)]
     (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
       (infer-frame-helper next-diagram units next-unit end-unit)
       next-diagram)))
 
-(defn identity-stmt [diagram unit]
+(defn identity-stmt [diagram ^JIdentityStmt unit]
   (let [name (-> unit .getLeftOp .getName)]
     (-> (d/add-object diagram [name (str "@" name)])
       (d/add-formal name))))
@@ -278,7 +290,7 @@
             must-field-groups (for [x call-objs]
                                 (group-by
                                   (fn [edge] (second edge))
-                                  ((call-diag :must-mod) x)))
+                                  (((dbg call-diag) :must-mod) x)))
             
             ; Determine the fields that *must* be modified in ctxt, iff the field in *all* corresponding objs of call are must-be-modified  
             must-mod-fields (reduce
@@ -297,6 +309,7 @@
             adjusted-edges (d/multi-apply
                              [((ctxt-diag :must-mod) ctxt-obj) ((ctxt-diag :may-mod) ctxt-obj)]
                              (fn [edge-pair field]
+                               (println "hello") 
                                (if (and 
                                      is-uniq-ctxt-obj
                                      (contains? must-mod-fields field)

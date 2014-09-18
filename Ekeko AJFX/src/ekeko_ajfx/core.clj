@@ -226,6 +226,12 @@ For example, the function could return a list like this:
         method (first (first q))]
     (-> method .getActiveBody .getUnits)))
 
+
+(inspect
+  (let [q (ekeko [?a] (soot|method-name ?a "helper3"))
+        method (first (first q))]
+    method))
+
 (ekeko [?a ?b] (soot|method-name ?a ?b))
 
 (inspect
