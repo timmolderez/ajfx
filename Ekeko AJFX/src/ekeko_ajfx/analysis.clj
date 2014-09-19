@@ -5,10 +5,11 @@
   (:use 
     [inspector-jay.core])
   (:require 
-    [ekeko-ajfx.diagram :as d])
+    [ekeko-ajfx.diagram :as d]
+    [ekeko-ajfx.library :as l])
   (:import
     [java.util HashSet]
-    [soot SootMethod Unit PatchingChain] 
+    [soot SootMethod Unit PatchingChain PrimType] 
     [soot.jimple IdentityStmt Stmt]
     [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr JTableSwitchStmt JIdentityStmt]
     [soot.jimple ThisRef ParameterRef ReturnStmt]
@@ -25,7 +26,9 @@
 
 (defmacro dbg[x] `(let [x# ~x] (println " dbg:" '~x "=" x#) x#))
 
-(d/reset-obj-id)
+(declare infer-frame)
+(declare infer-frame-helper)
+(declare infer-frame-from-scratch)
 
 ; Test case
 ;(let [diagram (-> (d/new-diagram ["a" "b" "c"])
@@ -38,62 +41,18 @@
 ;  (d/find-edges diagram "a" "f" :may-mod)
 ;  (d/reset-obj-id))
 
-; This global set contains all methods for which the analysis was initiated, but not yet finished (in order to detect recursive calls)
-(def ^HashSet started-analysis (new java.util.HashSet))
-(-> started-analysis .clear)
-
-(defn infer-frame [^SootMethod method]
-  "Infer the aliasing diagram of a given method body
-   (from which you can determine the body's frame condition)"
-  (if (-> method .hasActiveBody)
-    (infer-frame-from-scratch method)
-    (let []
-      (println "!! No body for method " method)
-      (d/new-diagram []))))
-
-(defn infer-frame-from-scratch [^SootMethod method]
-  (println "Analysing method:" method)
-  (let [body (-> method .getActiveBody)
-        units (-> body .getUnits)
-        diagram (-> (d/new-diagram [])
-                  (d/add-object ["@@constant"]))]
-    (if (-> started-analysis (.contains method))
-      (let [] 
-        (println "recursive call!" method)
-        diagram)
-      (let []
-        (-> started-analysis (.add method))
-        (let [frame (infer-frame-helper diagram units (-> units .getFirst) nil)]
-          (-> started-analysis (.remove method))
-          frame)))))
 
 ;;; Intraprocedural analysis ;;;
 
-(defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
-  (let [dbg (dbg unit)
-        next (cond 
-               (instance? IdentityStmt unit) (identity-stmt diagram unit)
-               (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
-               (-> unit .containsInvokeExpr) (call-stmt diagram unit)
-               (instance? JGotoStmt unit) (loop-stmt diagram unit units) 
-               (instance? JIfStmt unit) (if-stmt diagram unit units)
-               (instance? JTableSwitchStmt unit) diagram ; TODO
- (instance? ReturnStmt unit) (return-stmt diagram unit) 
-               :else diagram)
-        ^Stmt next-unit (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
-                    (second next)
-                    (-> units (.getSuccOf unit)))
-        next-diagram (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
-                       (first next)
-                       next)
-        tmp (println next-diagram)]
-    (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
-      (infer-frame-helper next-diagram units next-unit end-unit)
-      next-diagram)))
+(def ANY-OBJ "%constant") 
 
 (defn identity-stmt [diagram ^JIdentityStmt unit]
-  (let [name (-> unit .getLeftOp .getName)]
-    (-> (d/add-object diagram [name (str "@" name)])
+  (let [name (-> unit .getLeftOp .getName)
+        is-primitive (instance? PrimType (-> unit .getRightOp .getType))
+        new-id (if is-primitive
+                 (first (d/find-objs-by-name diagram ANY-OBJ))
+                 (d/new-obj-id))]
+    (-> (d/add-object-with-id diagram new-id [name (str "@" name)])
       (d/add-formal name))))
 
 (defn assign-stmt [diagram unit]
@@ -112,12 +71,13 @@
 
 (defn copy-stmt [diagram lhs rhs]
   "Processes an a = b; assignment"
-  (if (instance? JimpleLocal rhs)
-    (let [lhs-name (-> lhs .toString)
-          rhs-name (-> rhs .toString)
-          rhs-occurrences (d/find-objs-by-name diagram rhs-name)]
-      (d/add-name (d/remove-name diagram lhs-name) rhs-occurrences lhs-name))
-    (d/remove-name diagram (-> lhs .toString))))
+  (let [lhs-name (-> lhs .toString)
+        rhs-name (-> rhs .toString)
+        rhs-is-var (instance? JimpleLocal rhs) 
+        rhs-occurrences (if rhs-is-var
+                          (d/find-objs-by-name diagram rhs-name)
+                          (d/find-objs-by-name diagram ANY-OBJ))]
+    (d/add-name (d/remove-name diagram lhs-name) rhs-occurrences lhs-name)))
 
 (defn field-read-stmt [diagram lhs rhs]
   "Processes an a = b.f; assignment" 
@@ -143,7 +103,7 @@
         lhs-field (-> lhs .getField .getName)
         rhs-name (if (instance? JimpleLocal rhs)
                    (-> rhs .toString)
-                   "@@constant")
+                   ANY-OBJ)
         lhs-found (d/find-objs-by-name diagram lhs-recv)
         after-rm (if (= 1 (count lhs-found))
                    (-> (d/remove-edges diagram (first lhs-found) lhs-field :may-mod)
@@ -164,7 +124,8 @@
   (let [cls-name (-> rhs .getType .toString)
         lhs-name (-> lhs .toString)
         obj-name (str "@" cls-name (new-id))]
-    (d/add-object (d/remove-name diagram lhs-name) [obj-name])))
+    (-> (d/remove-name diagram lhs-name)
+      (d/add-object [obj-name lhs-name]))))
 
 (defn if-stmt [diagram unit units]
   (let [begin-else (-> unit .getTarget)
@@ -213,15 +174,20 @@
 ;;; Interprocedural analysis ;;;
 
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
-  (let [tmp (dbg [formals actuals])
-        mapped-roots (d/multi-apply 
+  (let [mapped-roots (d/multi-apply 
                        {}
                        (fn [m root] 
-                         (let [index (.indexOf formals (subs (name root) 1))]
+                         (let [index (.indexOf formals (subs (name root) 1))] 
                            (if (not= index -1)
-                             (assoc m 
-                               (first ((call-diag :names) root)) 
-                               ((ctxt-diag :names) (keyword (-> (nth actuals index) .toString)))) ; TODO, can we accidentally map to something in case of a constant actual?
+                             (let [actual (nth actuals index)
+                                   ignorable (or 
+                                               (= actual nil) 
+                                               (and (not (instance? java.util.ArrayList actual)) (instance? PrimType (-> actual .getType))))]
+                               (if ignorable
+                                 m
+                                 (assoc m 
+                                   (first ((call-diag :names) root)) 
+                                   ((ctxt-diag :names) (keyword (-> actual .toString))))))
                              (assoc m (first ((call-diag :names) root)) #{(d/new-obj-id)}))))
                        (for [x (filter
                                  (fn [x] (-> (name x) (.startsWith  "@")))
@@ -290,7 +256,7 @@
             must-field-groups (for [x call-objs]
                                 (group-by
                                   (fn [edge] (second edge))
-                                  (((dbg call-diag) :must-mod) x)))
+                                  ((call-diag :must-mod) x)))
             
             ; Determine the fields that *must* be modified in ctxt, iff the field in *all* corresponding objs of call are must-be-modified  
             must-mod-fields (reduce
@@ -308,8 +274,7 @@
             
             adjusted-edges (d/multi-apply
                              [((ctxt-diag :must-mod) ctxt-obj) ((ctxt-diag :may-mod) ctxt-obj)]
-                             (fn [edge-pair field]
-                               (println "hello") 
+                             (fn [edge-pair field] 
                                (if (and 
                                      is-uniq-ctxt-obj
                                      (contains? must-mod-fields field)
@@ -348,7 +313,7 @@
     (for [x (keys m)] [x])))
 
 (defn call-stmt [ctxt-diagram unit]
-  (let [method (dbg (-> unit .getInvokeExpr .getMethod))
+  (let [method (-> unit .getInvokeExpr .getMethod)
         return-name (if (instance? JAssignStmt unit)
                       (-> unit .getLeftOp .getName)
                       nil)
@@ -368,4 +333,57 @@
         (d/add-name 
           (reduce clojure.set/union
             (for [x (call-diagram :return)] (call2ctxt x))) 
-          return-name))))) 
+          return-name)))))
+
+;;; Frame inference analysis ;;;
+
+; This global set contains all methods for which the analysis was initiated, but not yet finished (in order to detect recursive calls)
+(def ^HashSet started-analysis (new java.util.HashSet))
+(-> started-analysis .clear)
+
+(defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
+  (let [dbg (dbg unit)
+        next (cond 
+               (instance? IdentityStmt unit) (identity-stmt diagram unit)
+               (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
+               (-> unit .containsInvokeExpr) (call-stmt diagram unit)
+               (instance? JGotoStmt unit) (loop-stmt diagram unit units) 
+               (instance? JIfStmt unit) (if-stmt diagram unit units)
+               (instance? JTableSwitchStmt unit) diagram ; TODO
+ (instance? ReturnStmt unit) (return-stmt diagram unit) 
+               :else diagram)
+        ^Stmt next-unit (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
+                    (second next)
+                    (-> units (.getSuccOf unit)))
+        next-diagram (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
+                       (first next)
+                       next)
+        tmp (println next-diagram)]
+    (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
+      (infer-frame-helper next-diagram units next-unit end-unit)
+      next-diagram)))
+
+(defn infer-frame-from-scratch [^SootMethod method]
+  (println "Analysing method:" method)
+  (let [body (-> method .getActiveBody)
+        units (-> body .getUnits)
+        diagram (-> (d/new-diagram [])
+                  (d/add-object [ANY-OBJ]))]
+    (if (-> started-analysis (.contains method))
+      (let [] 
+        (println "recursive call!" method)
+        diagram)
+      (let []
+        (-> started-analysis (.add method))
+        (let [frame (infer-frame-helper diagram units (-> units .getFirst) nil)]
+          (-> started-analysis (.remove method))
+          frame)))))
+
+(defn infer-frame [^SootMethod method]
+  "Infer the aliasing diagram of a given method body
+   (from which you can determine the body's frame condition)"
+  (if (-> method .hasActiveBody)
+    (infer-frame-from-scratch method)
+    (let []
+      (println "!! No body for method " method)
+      (l/get-frame-from-library method))))

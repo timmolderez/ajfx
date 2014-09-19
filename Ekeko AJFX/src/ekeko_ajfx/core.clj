@@ -20,20 +20,21 @@
     [soot.jimple ThisRef ParameterRef]
     [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]))
 
+(comment
 (defn varType-recursive
   [var unitChain]
-  "Helper method of varType"
-  (let [unit (first unitChain)
-        varName (-> var .getName)
-        unitRest (rest unitChain)]
-    (if (instance? IdentityStmt unit)
-      (if (= varName (-> unit .getLeftOp .getName))
-        (cond (instance? ThisRef (-> unit .getRightOp)) :this
+ "Helper method of varType"
+ (let [unit (first unitChain)
+       varName (-> var .getName)
+       unitRest (rest unitChain)]
+   (if (instance? IdentityStmt unit)
+     (if (= varName (-> unit .getLeftOp .getName))
+       (cond (instance? ThisRef (-> unit .getRightOp)) :this
           (instance? ParameterRef (-> unit .getRightOp)) :parameter)
-        (if (not-empty unitRest)
-          (varType-recursive var unitRest)
-          :local))
-      :local)))
+       (if (not-empty unitRest)
+         (varType-recursive var unitRest)
+         :local))
+     :local)))
 
 (defn varType
   [var method]
@@ -171,7 +172,7 @@ For example, the function could return a list like this:
 ;(inspect (getAdviceN 1))
 
 (inspect (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
-     (inferAdviceFrame0 (first(nth allAdvice 0)))))
+     (inferAdviceFrame0 (first(nth allAdvice 0))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (comment
 (inspect 
@@ -213,9 +214,9 @@ For example, the function could return a list like this:
 (ekeko-ajfx.diagram/reset-obj-id)
 (-> ekeko-ajfx.analysis/started-analysis .clear)
 (let [q (ekeko [?a] (soot|method-name ?a "helper3"))
-        method (first (first q))
-        frame (infer-frame method)]
-    frame)
+      method (first (first q))
+      frame (infer-frame method)]
+  frame)
 ;;;;;;;;;;;;;;
 
 

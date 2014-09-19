@@ -18,6 +18,8 @@
 
 (defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
 
+(def ANY-OBJ "%constant") 
+
 "Ensures all objects within a graph have a unique identifier"
 (def last-obj-id (atom 0))
 
@@ -57,10 +59,6 @@
   (let [new-formals (conj (diagram :formals) name)]
     (assoc diagram :formals new-formals))) 
 
-(defn add-object [diagram names]
-  "Add a new object to a diagram (and generate an id). This object can be referred to by a number of names."
-  (add-object-with-id diagram (new-obj-id) names))
-
 (defn add-object-with-id [diagram id names]
   "Add a new object to a diagram with a given id. This object can be referred to by a number of names."
   (let [helper (fn [diagram names]
@@ -70,6 +68,11 @@
                      (add-name diagram #{id} (first names))
                      (rest names))))]
     (helper diagram names)))
+
+
+(defn add-object [diagram names]
+  "Add a new object to a diagram (and generate an id). This object can be referred to by a number of names."
+  (add-object-with-id diagram (new-obj-id) names))
 
 (defn replace-name [diagram old-name new-name]
   "All objects that are referred to by old-name will now be referred to be new-name instead."
