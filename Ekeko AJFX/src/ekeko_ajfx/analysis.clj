@@ -55,20 +55,6 @@
     (-> (d/add-object-with-id diagram new-id [name (str "@" name)])
       (d/add-formal name))))
 
-(defn assign-stmt [diagram unit]
-  (let [lhs (-> unit .getLeftOp)
-        rhs (-> unit .getRightOp)]
-    (cond
-      ; Assignment type: a = new c ();
-      (instance? JNewExpr rhs) (new-stmt diagram lhs rhs) 
-      ; Assignment type: a = b;
-      (and (instance? JimpleLocal lhs) (not (instance? JInstanceFieldRef rhs ))) (copy-stmt diagram lhs rhs)
-      ; Assignment type: a.f = b;
-      (instance? JInstanceFieldRef lhs) (field-write-stmt diagram lhs rhs) 
-      ; Assignment type: a = b.f;
-      (instance? JInstanceFieldRef rhs) (field-read-stmt diagram lhs rhs) 
-      :else (println "Unrecognized type of assignment!"))))
-
 (defn copy-stmt [diagram lhs rhs]
   "Processes an a = b; assignment"
   (let [lhs-name (-> lhs .toString)
@@ -127,6 +113,20 @@
     (-> (d/remove-name diagram lhs-name)
       (d/add-object [obj-name lhs-name]))))
 
+(defn assign-stmt [diagram unit]
+  (let [lhs (-> unit .getLeftOp)
+        rhs (-> unit .getRightOp)]
+    (cond
+      ; Assignment type: a = new c ();
+      (instance? JNewExpr rhs) (new-stmt diagram lhs rhs) 
+      ; Assignment type: a = b;
+      (and (instance? JimpleLocal lhs) (not (instance? JInstanceFieldRef rhs ))) (copy-stmt diagram lhs rhs)
+      ; Assignment type: a.f = b;
+      (instance? JInstanceFieldRef lhs) (field-write-stmt diagram lhs rhs) 
+      ; Assignment type: a = b.f;
+      (instance? JInstanceFieldRef rhs) (field-read-stmt diagram lhs rhs) 
+      :else (println "Unrecognized type of assignment!"))))
+
 (defn if-stmt [diagram unit units]
   (let [begin-else (-> unit .getTarget)
         end-if (-> units (.getPredOf begin-else))
@@ -143,6 +143,9 @@
         merged-diagram (d/merge-diagrams if-diagram else-diagram)
         next-unit (if has-else end-else begin-else)]
     [merged-diagram next-unit]))
+
+(defn try-catch-stmt [diagram unit]
+  [diagram (-> unit .getTarget)]) ; Don't change the diagram, and just skip the catch blocks..
 
 (defn loop-stmt [diagram unit units]
   (let [end-loop (-> unit .getTarget)
@@ -347,15 +350,16 @@
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
                (-> unit .containsInvokeExpr) (call-stmt diagram unit)
-               (instance? JGotoStmt unit) (loop-stmt diagram unit units) 
+               (and (instance? JGotoStmt unit) (not (instance? IdentityStmt (-> units (.getSuccOf unit))))) (loop-stmt diagram unit units)
+               (instance? JGotoStmt unit) (try-catch-stmt diagram unit) 
                (instance? JIfStmt unit) (if-stmt diagram unit units)
-               (instance? JTableSwitchStmt unit) diagram ; TODO
- (instance? ReturnStmt unit) (return-stmt diagram unit) 
-               :else diagram)
-        ^Stmt next-unit (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
+               (instance? JTableSwitchStmt unit) diagram ; TODO 
+               (instance? ReturnStmt unit) (return-stmt diagram unit) 
+               :else diagram) ; Any other kind of stmt is ignored.. (throws , enter/exit monitor, breakpoint)
+        ^Stmt next-unit (if (sequential? next)
                     (second next)
                     (-> units (.getSuccOf unit)))
-        next-diagram (if (or (instance? JGotoStmt unit) (instance? JIfStmt unit))
+        next-diagram (if (sequential? next)
                        (first next)
                        next)
         tmp (println next-diagram)]

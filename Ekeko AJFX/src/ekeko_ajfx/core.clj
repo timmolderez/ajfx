@@ -20,6 +20,65 @@
     [soot.jimple ThisRef ParameterRef]
     [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]))
 
+
+(defn get-all-advice []
+  (set (ekeko [?adv]
+         (w/advice ?adv)))
+;  (comment (inspect (ekeko [?method]
+;                      (l/fresh [?advice]
+;                        (w/advice ?advice)
+;                        (ajsoot/advice-soot|method ?advice ?method)))))
+  )
+
+(comment
+  (inspect (get-all-advice))
+  
+  (inspect (for [x (get-all-advice)]
+            (-> (first x) .getSourceLocation)))
+  )
+
+;(defn advice []
+;  (ek/ekeko [?advice]
+;            (wea/advice 
+;              ?advice)))
+;
+;(defn shadow []
+;  (ek/ekeko [?shadow]
+;            (wea/shadow 
+;              ?shadow)))
+;
+;(defn advice-shadow []
+;  (ek/ekeko [?advice ?shadow]
+;            (wea/advice-shadow 
+;              ?advice 
+;              ?shadow)))
+;
+;(defn method []
+;  (ek/ekeko [?method]
+;            (wea/method 
+;              ?method)))
+;
+;(defn shadow|invocation-method|called
+;  "Returns the BcelMethod referenced within the provided shadow"
+;  ([] (map 
+;        (fn[x](vector 
+;                (first x) 
+;                (shadow|invocation-method|called (first x)))) 
+;        (shadow)))
+;  ([shadow] (first(first(filter 
+;                          (fn [x] (.contains (.toString shadow) (.toString (first x)))) 
+;                          (method))))))
+;
+;(defn bceladvice|aspect [advice]
+;  (ek/ekeko [?aspect]
+;            (wea/aspect-advice ?aspect advice)))
+
+
+
+
+
+
+
 (comment
 (defn varType-recursive
   [var unitChain]

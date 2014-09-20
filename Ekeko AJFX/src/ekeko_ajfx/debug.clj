@@ -91,11 +91,6 @@
     :layout
     layout|tree)))
 
-
-
-(showBlockCFG (-> (getAdviceN 0) .getActiveBody))
-(inspect (-> (getAdviceN 0) .getActiveBody))
-
 (defn getAdviceN
   "Get the nth advice body in the system (as a Soot method)" 
   [n]
@@ -106,7 +101,12 @@
                            (ajsoot/advice-soot|method ?advice ?method)))
            n)))
 
-(inspect (new LoopNestTree (-> (getAdviceN 0) .getActiveBody )))
+;(showBlockCFG (-> (getAdviceN 0) .getActiveBody))
+;(inspect (-> (getAdviceN 0) .getActiveBody))
+;
+;(inspect (new LoopNestTree (-> (getAdviceN 0) .getActiveBody )))
+
+
 ;
 ;(inspect (ekeko [?method]
 ;                  (l/fresh [?advice]
