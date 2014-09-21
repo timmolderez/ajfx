@@ -365,7 +365,8 @@
           (-> started-analysis (.remove method))
           frame)))))
 
-(memo-clear! infer-frame)
+(defn clear-cache []
+  (memo-clear! infer-frame))
 
 (def infer-frame 
   (memo (fn [^SootMethod method]

@@ -23,6 +23,7 @@
 (defn do-analysis [method]
   (ekeko-ajfx.diagram/reset-obj-id)
   (-> ekeko-ajfx.analysis/started-analysis .clear)
+  (ekeko-ajfx.analysis/clear-cache)
   (infer-frame method))
 
 (defn get-all-advice []
@@ -46,8 +47,8 @@
   (count (get-all-advice-bodies))
   (inspect (get-all-bodies))
   
-  (do-analysis (nth 
-                 (for [x (get-all-advice-bodies)] (first x)) 10))
+  (time (do-analysis (nth 
+                 (for [x (get-all-advice-bodies)] (first x)) 10)))
   (inspect (nth (for [x (get-all-advice-bodies)] (first x)) 10))
   
   (inspect (filter
