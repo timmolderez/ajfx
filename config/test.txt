@@ -1,8 +1,0 @@
--sourceroots
-C:/Users/Tim/Desktop/Tools/eclipse_ee/workspace/ajfx-test/src
-
--main-class
-ajfx.test.Main
-
--outjar
-output\test.jar
