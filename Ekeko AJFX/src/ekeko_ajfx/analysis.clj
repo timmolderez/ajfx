@@ -11,7 +11,8 @@
     [java.util HashSet]
     [soot SootMethod Unit PatchingChain PrimType] 
     [soot.jimple IdentityStmt Stmt]
-    [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt JInstanceFieldRef JNewExpr JTableSwitchStmt JIdentityStmt]
+    [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt 
+     JInstanceFieldRef JNewExpr JTableSwitchStmt JIdentityStmt JNewArrayExpr JArrayRef]
     [soot.jimple ThisRef ParameterRef ReturnStmt]
     [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]
     [org.aspectj.lang Signature]
@@ -100,31 +101,37 @@
       (d/add-edges after-rm lhs-recv lhs-field :must-mod rhs-name)
       (d/add-edges after-rm lhs-recv lhs-field :may-mod rhs-name))))
 
-(def last-new-id (atom 0))
-(defn reset-new-id []
-  (swap! last-new-id (fn [x] 0))) 
-(defn new-id []
-  (keyword (str (swap! last-new-id inc))))
+;(def last-new-id (atom 0))
+;(defn reset-new-id []
+;  (swap! last-new-id (fn [x] 0))) 
+;(defn new-id []
+;  (keyword (str (swap! last-new-id inc))))
 
 (defn new-stmt [diagram lhs rhs]
   (let [cls-name (-> rhs .getType .toString)
         lhs-name (-> lhs .toString)
-        obj-name (str "@" cls-name (new-id))]
+        obj-name (str "@" cls-name (d/new-obj-id))]
     (-> (d/remove-name diagram lhs-name)
       (d/add-object [obj-name lhs-name]))))
+
+(defn array-write-stmt [diagram lhs rhs]
+  (let [arr (-> lhs .getBaseBox .toString)]
+    (d/add-edges diagram arr "element" :may-mod ANY-OBJ)))
 
 (defn assign-stmt [diagram unit]
   (let [lhs (-> unit .getLeftOp)
         rhs (-> unit .getRightOp)]
     (cond
       ; Assignment type: a = new c ();
-      (instance? JNewExpr rhs) (new-stmt diagram lhs rhs) 
+      (or (instance? JNewExpr rhs) (instance? JNewArrayExpr rhs)) (new-stmt diagram lhs rhs) 
       ; Assignment type: a = b;
       (and (instance? JimpleLocal lhs) (not (instance? JInstanceFieldRef rhs ))) (copy-stmt diagram lhs rhs)
       ; Assignment type: a.f = b;
       (instance? JInstanceFieldRef lhs) (field-write-stmt diagram lhs rhs) 
       ; Assignment type: a = b.f;
-      (instance? JInstanceFieldRef rhs) (field-read-stmt diagram lhs rhs) 
+      (instance? JInstanceFieldRef rhs) (field-read-stmt diagram lhs rhs)
+      ; Assignment type: a[x] = b;
+      (instance? JArrayRef lhs) (array-write-stmt diagram lhs rhs)
       :else (println "Unrecognized type of assignment!"))))
 
 (defn if-stmt [diagram unit units]

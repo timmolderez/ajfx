@@ -233,33 +233,33 @@ For example, the function could return a list like this:
 (inspect (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
      (inferAdviceFrame0 (first(nth allAdvice 0))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(comment
-(inspect 
-  (ekeko 
-    [?a ?b ?c]
-    (virtualInvoke-parameter ?a ?b ?c)
-    ))
+;(comment
+;(inspect 
+;  (ekeko 
+;    [?a ?b ?c]
+;    (virtualInvoke-parameter ?a ?b ?c)
+;    ))
+;
+;(inspect 
+;  (ekeko 
+;    [?a ?b ?c ?d ?e]
+;    (method-methodCalls ?a ?b ?c ?d)
+;    (equals ?e (.getUseBoxes ?c))))
 
-(inspect 
-  (ekeko 
-    [?a ?b ?c ?d ?e]
-    (method-methodCalls ?a ?b ?c ?d)
-    (equals ?e (.getUseBoxes ?c))))
-
-(inspect
-  (ekeko [?b]
-   (l/fresh [?a]
-                    (jsoot/soot|method-soot|unit ?a ?b)
-                    (soot|method-name ?a "unused"))))
-
-(let [allAdvice (ekeko [?advice] (w/advice ?advice))]
-     (inferAdviceFrame (first(first allAdvice))))
-
+;(inspect
+;  (ekeko [?b]
+;   (l/fresh [?a]
+;                    (jsoot/soot|method-soot|unit ?a ?b)
+;                    (soot|method-name ?a "unused"))))
+;
+;(let [allAdvice (ekeko [?advice] (w/advice ?advice))]
+;     (inferAdviceFrame (first(first allAdvice))))
+;
 ; Get the units of a particular method
-(inspect
-  (damp.ekeko/ekeko
-    [?unit]
-    (jsoot/soot-unit :JIdentityStmt ?unit)))
+;(inspect
+;  (damp.ekeko/ekeko
+;    [?unit]
+;    (jsoot/soot-unit :JIdentityStmt ?unit)))
 
 ; Find the calls in a particular method
 (inspect 
