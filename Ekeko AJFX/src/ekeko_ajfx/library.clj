@@ -21,15 +21,15 @@
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
+(defmacro dbg[x] `(let [x# ~x] (println " dbg:" '~x "=" x#) x#))
+
 (def frame-library {:Test
                     {:helper3 (d/new-diagram [])}
                     :helper4 (-> (d/new-diagram [])
                                (d/add-object "@this")
                                (d/add-formal "this")
-                               (d/add-edges-to-new-object "@this" :must-mod "tgt"))
+                               (d/add-edges-to-new-object "@this" "f" :must-mod "tgt"))
                     })
-
-
 
 (defn generate-default-frame [method]
   (let [return-type (-> method .getReturnType)
@@ -39,7 +39,7 @@
       returns-void (d/new-diagram [])
       :else (-> (d/new-diagram [])
               (d/add-object [d/ANY-OBJ])
-              (d/add-return-val [d/ANY-OBJ])))))
+              (d/add-return-val d/ANY-OBJ)))))
 
 (defn get-frame-from-library [method]
   (let [entry (frame-library (keyword (-> method .getDeclaringClass .getJavaStyleName)))]

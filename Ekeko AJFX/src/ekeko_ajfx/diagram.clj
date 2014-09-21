@@ -18,7 +18,7 @@
 
 (defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
 
-(def ANY-OBJ "%constant") 
+(def ANY-OBJ "%ANY")
 
 "Ensures all objects within a graph have a unique identifier"
 (def last-obj-id (atom 0))
@@ -156,23 +156,6 @@
         new-return-val (clojure.set/union return-val objs)]
     (assoc diagram :return new-return-val)))
 
-;(defmacro multi-apply [x func args]
-;  "Apply func to x, using the 1st element of args as parameters;
-;   then apply func again using the 2nd element of args as parameters; ...
-;   and so on until args is exhausted."
-;  (if (not (empty? args))
-;    (let [first-app (list func x (first args))]
-;      `(repeated-thread ~first-app ~func ~(rest args)))
-;    x))
-
-;(defmacro multi-apply [x func args]
-;  "Apply func to x, using the 1st element of args as parameters;
-;   then apply func again using the 2nd element of args as parameters; ...
-;   and so on until args is exhausted."
-;  (if (not (empty? args))
-;    `(multi-apply (apply ~func ~x ~(first args)) ~func ~(rest args))
-;    x))
-
 (defn multi-apply [x func args]
   (let [helper (fn [input args]
                  (if (empty? args)
@@ -191,7 +174,7 @@
 
 (defn intersect-edges [one two]
   (multi-apply
-    {}
+    [{} {}]
     (fn [pair key]
       (let [one-val (one key)
             two-val (two key)
@@ -199,19 +182,23 @@
             two-labels (set (for [x two-val] (second x)))
             intersect-labels (clojure.set/intersection one-labels two-labels)
             union-val (clojure.set/union one-val two-val)
-            filter-func (fn [x] (contains? intersect-labels (second x)))
-            filtered (filter filter-func union-val)
-            compl (filter (complement filter-func) union-val)]
-        [(if (empty? filtered) (first pair) (assoc (first pair) key filtered))
-         (if (empty? compl) (second pair) (assoc (second pair) key compl))
-         ]
-         
-        ))
+            filtered (filter
+                       (fn [x] (contains? intersect-labels (second x)))
+                       union-val)
+            compl (filter 
+                    (complement (fn [x] (contains? intersect-labels (second x)))) 
+                    union-val)]
+        [(if (empty? filtered) 
+           (first pair)
+           (assoc (first pair) key filtered))
+         (if (empty? compl)
+           (second pair)
+           (assoc (second pair) key compl))]))
     (for [x (clojure.set/union (set (keys one)) (set (keys two)))] [x])))
 
-(intersect-edges
-  {:1 #{[:4 "f"] [:3 "g"] [:4 "g"] [:5 "h"]} :2 #{[:1 "f"] [:3 "g"]}} 
-  {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})
+;(intersect-edges
+;  {:1 #{[:4 "f"] [:3 "g"] [:4 "g"] [:5 "h"]} :2 #{[:1 "f"] [:3 "g"]}} 
+;  {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})
 
 (defn merge-diagrams [d1 d2]
   (let [new-diag (new-diagram [])

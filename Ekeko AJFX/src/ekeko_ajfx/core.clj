@@ -20,18 +20,40 @@
     [soot.jimple ThisRef ParameterRef]
     [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]))
 
+(defn do-analysis [method]
+  (ekeko-ajfx.diagram/reset-obj-id)
+  (-> ekeko-ajfx.analysis/started-analysis .clear)
+  (infer-frame method))
 
 (defn get-all-advice []
   (set (ekeko [?adv]
-         (w/advice ?adv)))
-;  (comment (inspect (ekeko [?method]
-;                      (l/fresh [?advice]
-;                        (w/advice ?advice)
-;                        (ajsoot/advice-soot|method ?advice ?method)))))
-  )
+         (w/advice ?adv))))
+
+(defn get-all-advice-bodies []
+  (set (ekeko [?method]
+         (l/fresh [?advice]
+           (w/advice ?advice)
+           (ajsoot/advice-soot|method ?advice ?method)))))
+
+(defn get-all-bodies []
+  (ekeko [?method]
+         (l/fresh []
+           (jsoot/soot :method ?method))))
 
 (comment
   (inspect (get-all-advice))
+  (inspect (get-all-advice-bodies))
+  (count (get-all-advice-bodies))
+  (inspect (get-all-bodies))
+  
+  (do-analysis (nth 
+                 (for [x (get-all-advice-bodies)] (first x)) 10))
+  (inspect (nth (for [x (get-all-advice-bodies)] (first x)) 10))
+  
+  (inspect (filter
+             (fn [x]
+               (-> (first x) .getName (.startsWith "ajc$")))
+             (get-all-bodies)))
   
   (inspect (for [x (get-all-advice)]
             (-> (first x) .getSourceLocation)))
@@ -233,7 +255,7 @@ For example, the function could return a list like this:
 (inspect (let [allAdvice (ekeko [?advice] (w/advice ?advice))]
      (inferAdviceFrame0 (first(nth allAdvice 0))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;(comment
+(comment
 ;(inspect 
 ;  (ekeko 
 ;    [?a ?b ?c]

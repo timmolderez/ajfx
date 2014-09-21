@@ -3,27 +3,17 @@
     :author "Tim Molderez" }
   ekeko-ajfx.analysis
   (:use 
-    [inspector-jay.core])
+    [inspector-jay.core]
+    [clojure.core.memoize])
   (:require 
     [ekeko-ajfx.diagram :as d]
     [ekeko-ajfx.library :as l])
   (:import
     [java.util HashSet]
     [soot SootMethod Unit PatchingChain PrimType] 
-    [soot.jimple IdentityStmt Stmt]
+    [soot.jimple IdentityStmt Stmt ThisRef ParameterRef ReturnStmt]
     [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt 
-     JInstanceFieldRef JNewExpr JTableSwitchStmt JIdentityStmt JNewArrayExpr JArrayRef]
-    [soot.jimple ThisRef ParameterRef ReturnStmt]
-    [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]
-    [org.aspectj.lang Signature]
-    [java.lang Integer]
-    [org.eclipse.jdt.core IJavaElement ITypeHierarchy IType IPackageFragment IClassFile ICompilationUnit
-     IJavaProject WorkingCopyOwner IMethod]
-    [org.eclipse.jdt.core.dom Expression IVariableBinding ASTParser AST IBinding Type TypeDeclaration 
-     QualifiedName SimpleName ITypeBinding MethodDeclaration
-     MethodInvocation ClassInstanceCreation SuperConstructorInvocation SuperMethodInvocation
-     SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
-    [org.aspectj.weaver.patterns Pointcut AndPointcut]))
+     JInstanceFieldRef JNewExpr JTableSwitchStmt JIdentityStmt JNewArrayExpr JArrayRef]))
 
 (defmacro dbg[x] `(let [x# ~x] (println " dbg:" '~x "=" x#) x#))
 
@@ -31,27 +21,13 @@
 (declare infer-frame-helper)
 (declare infer-frame-from-scratch)
 
-; Test case
-;(let [diagram (-> (d/new-diagram ["a" "b" "c"])
-;                (d/add-object #{"bla"})
-;                (d/add-name #{:1 :2} "d") 
-;                (d/add-edges "a" "f" :may-mod "b")
-;                (d/add-edges "d" "g" :may-mod "c")
-;                (d/add-edges-to-new-object "d" "h" :must-mod "z")
-;                (d/remove-edges :1 "g" :may-mod))]
-;  (d/find-edges diagram "a" "f" :may-mod)
-;  (d/reset-obj-id))
-
-
-;;; Intraprocedural analysis ;;;
-
-(def ANY-OBJ "%constant") 
+;;; Intraprocedural analysis ;;; 
 
 (defn identity-stmt [diagram ^JIdentityStmt unit]
   (let [name (-> unit .getLeftOp .getName)
         is-primitive (instance? PrimType (-> unit .getRightOp .getType))
         new-id (if is-primitive
-                 (first (d/find-objs-by-name diagram ANY-OBJ))
+                 (first (d/find-objs-by-name diagram d/ANY-OBJ))
                  (d/new-obj-id))]
     (-> (d/add-object-with-id diagram new-id [name (str "@" name)])
       (d/add-formal name))))
@@ -63,7 +39,7 @@
         rhs-is-var (instance? JimpleLocal rhs) 
         rhs-occurrences (if rhs-is-var
                           (d/find-objs-by-name diagram rhs-name)
-                          (d/find-objs-by-name diagram ANY-OBJ))]
+                          (d/find-objs-by-name diagram d/ANY-OBJ))]
     (d/add-name (d/remove-name diagram lhs-name) rhs-occurrences lhs-name)))
 
 (defn field-read-stmt [diagram lhs rhs]
@@ -90,7 +66,7 @@
         lhs-field (-> lhs .getField .getName)
         rhs-name (if (instance? JimpleLocal rhs)
                    (-> rhs .toString)
-                   ANY-OBJ)
+                   d/ANY-OBJ)
         lhs-found (d/find-objs-by-name diagram lhs-recv)
         after-rm (if (= 1 (count lhs-found))
                    (-> (d/remove-edges diagram (first lhs-found) lhs-field :may-mod)
@@ -101,12 +77,6 @@
       (d/add-edges after-rm lhs-recv lhs-field :must-mod rhs-name)
       (d/add-edges after-rm lhs-recv lhs-field :may-mod rhs-name))))
 
-;(def last-new-id (atom 0))
-;(defn reset-new-id []
-;  (swap! last-new-id (fn [x] 0))) 
-;(defn new-id []
-;  (keyword (str (swap! last-new-id inc))))
-
 (defn new-stmt [diagram lhs rhs]
   (let [cls-name (-> rhs .getType .toString)
         lhs-name (-> lhs .toString)
@@ -116,7 +86,7 @@
 
 (defn array-write-stmt [diagram lhs rhs]
   (let [arr (-> lhs .getBaseBox .toString)]
-    (d/add-edges diagram arr "element" :may-mod ANY-OBJ)))
+    (d/add-edges diagram arr "element" :may-mod d/ANY-OBJ)))
 
 (defn assign-stmt [diagram unit]
   (let [lhs (-> unit .getLeftOp)
@@ -155,15 +125,19 @@
   [diagram (-> unit .getTarget)]) ; Don't change the diagram, and just skip the catch blocks..
 
 (defn loop-stmt [diagram unit units]
-  (let [end-loop (-> unit .getTarget)
+  (let [end-loop-body (-> unit .getTarget)
+        find-next-unit (fn [unit]
+                         (if (instance? JIfStmt unit)
+                           (-> units (.getSuccOf unit))
+                           (recur (-> units (.getSuccOf unit))))) 
         merged-diagram (d/multi-apply 
                          diagram
                          (fn [diagram]
                            (infer-frame-helper diagram units 
                              (-> units (.getSuccOf unit)) 
-                             end-loop))
-                         [[] [] [] []])]
-    [merged-diagram (-> units (.getSuccOf end-loop))]))
+                             end-loop-body))
+                         [[] []])]
+    [merged-diagram (find-next-unit end-loop-body)]))
 
 (defn cur-value [diagram object field]
   (let [must-found (filter
@@ -185,7 +159,7 @@
 
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
   (let [mapped-roots (d/multi-apply 
-                       {}
+                       {(first (d/find-objs-by-name call-diag d/ANY-OBJ)) (d/find-objs-by-name ctxt-diag d/ANY-OBJ)}
                        (fn [m root] 
                          (let [index (.indexOf formals (subs (name root) 1))] 
                            (if (not= index -1)
@@ -229,7 +203,7 @@
                                                  (if (empty? new-val)
                                                    [(assoc m call-tgt (clojure.set/union cur-val #{new-read-tgt} 
                                                                         (for [x new-val] (first x))))
-                                                    (assoc ctxt-reads ctxt-obj [new-read-tgt label])]
+                                                    (assoc ctxt-reads ctxt-obj #{[new-read-tgt label]})]
                                                    [(assoc m call-tgt (clojure.set/union 
                                                                         cur-val
                                                                         (for [x new-val] (first x))))
@@ -298,8 +272,8 @@
                                        new-musts (clojure.set/union old-musts-removed (merged-musts field))
                                        new-mays (clojure.set/union old-mays-removed (merged-mays field))]
                                    [new-musts new-mays])
-                                 (let [new-mays (clojure.set/union (edge-pair second) (merged-mays field) (merged-musts field))]
-                                   [(edge-pair first) new-mays])))
+                                 (let [new-mays (clojure.set/union (second edge-pair) (merged-mays field) (merged-musts field))]
+                                   [(first edge-pair) new-mays])))
                              (for [x (clojure.set/union 
                                        (set (keys merged-musts))
                                        (set (keys merged-mays)))] [x]))
@@ -369,7 +343,8 @@
         next-diagram (if (sequential? next)
                        (first next)
                        next)
-        tmp (println next-diagram)]
+        ;tmp (println next-diagram)
+        ]
     (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
       (infer-frame-helper next-diagram units next-unit end-unit)
       next-diagram)))
@@ -379,7 +354,7 @@
   (let [body (-> method .getActiveBody)
         units (-> body .getUnits)
         diagram (-> (d/new-diagram [])
-                  (d/add-object [ANY-OBJ]))]
+                  (d/add-object [d/ANY-OBJ]))]
     (if (-> started-analysis (.contains method))
       (let [] 
         (println "recursive call!" method)
@@ -390,11 +365,31 @@
           (-> started-analysis (.remove method))
           frame)))))
 
-(defn infer-frame [^SootMethod method]
-  "Infer the aliasing diagram of a given method body
-   (from which you can determine the body's frame condition)"
-  (if (-> method .hasActiveBody)
-    (infer-frame-from-scratch method)
-    (let []
-      (println "!! No body for method " method)
-      (l/get-frame-from-library method))))
+(memo-clear! infer-frame)
+
+(def infer-frame 
+  (memo (fn [^SootMethod method]
+          "Infer the aliasing diagram of a given method body
+           (from which you can determine the body's frame condition)"
+          (if (-> method .hasActiveBody)
+            (infer-frame-from-scratch method)
+            (let []
+              (println "!! No body for method " method)
+              (l/get-frame-from-library method))))))
+
+
+;(let [diagram (-> (d/new-diagram ["a" "b" "c"])
+;                (d/add-object #{"bla"})
+;                (d/add-name #{:1 :2} "d") 
+;                (d/add-edges "a" "f" :may-mod "b")
+;                (d/add-edges "d" "g" :may-mod "c")
+;                (d/add-edges-to-new-object "d" "h" :must-mod "z")
+;                (d/remove-edges :1 "g" :may-mod))]
+;  (d/find-edges diagram "a" "f" :may-mod)
+;  (d/reset-obj-id))
+
+;(def last-new-id (atom 0))
+;(defn reset-new-id []
+;  (swap! last-new-id (fn [x] 0))) 
+;(defn new-id []
+;  (keyword (str (swap! last-new-id inc))))
