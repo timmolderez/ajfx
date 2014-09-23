@@ -400,11 +400,39 @@
                    (for [x roots] [x]))
         
         get-assignable (fn [read-edges read-paths clause]
-                         (let [cur-obj (first (clojure.set/intersection 
-                                            (set (keys read-edges))
-                                            (set (keys read-paths))))])
-                         )]
-    (get-assignable (diagram :may-read) root-map []))) 
+                         (if (empty? read-edges)
+                           [read-paths clause]
+                           (let [cur-obj (first (clojure.set/intersection 
+                                                  (set (keys read-edges))
+                                                  (set (keys read-paths))))
+                                 cur-path (read-paths cur-obj)
+                                 new-read-paths (d/multi-apply
+                                                  read-paths
+                                                  (fn [r edge]
+                                                    (assoc r (first edge) (str cur-path "." (second edge))))
+                                                  (read-edges cur-obj))
+                                 new-clause (d/multi-apply
+                                              clause
+                                              (fn [c edge]
+                                                (conj c (str (read-paths cur-obj) "." (second edge))))
+                                              (clojure.set/union 
+                                                ((diagram :may-mod) cur-obj)
+                                                ((diagram :must-mod) cur-obj)
+                                                ))]
+                             (recur 
+                               (dissoc read-edges cur-obj)
+                               new-read-paths
+                               new-clause))))]
+    (get-assignable (diagram :may-read) root-map [])))
+
+(defn compare-assignable-clauses [master slave]
+  (filter
+    (fn [x]
+      (some
+        (fn [y] (-> x (.startsWith y)))
+        master))
+    slave)
+  ) 
 
 ;(defn infer-frame-slow [^SootMethod method]
 ;  (if (-> method .hasActiveBody)

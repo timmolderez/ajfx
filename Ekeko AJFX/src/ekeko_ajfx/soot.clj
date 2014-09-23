@@ -130,6 +130,14 @@
     (equals ?sig (method-signature ?method))))
 
 (defn 
+  soot|method-sig-full
+  "Relate a SootMethod to its complete signature (String)"
+  [?method ?sig]
+  (l/all
+    (jsoot/soot :method ?method)
+    (equals ?sig (-> ?method .getSignature))))
+
+(defn 
   soot|field-name
   "Relate a soot field to its name"
   [?field ?name]

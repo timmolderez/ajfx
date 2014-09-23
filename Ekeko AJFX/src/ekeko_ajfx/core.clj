@@ -1,20 +1,22 @@
 (ns 
   ^{:doc "Use AJFX to infer the frame conditions of Java/AspectJ code."
     :author "Tim Molderez" }
-  ekeko-ajfx.core
+ekeko-ajfx.core
   (:refer-clojure :exclude [== type declare class])
   (:require [clojure.core.logic :as l]
-            [damp.ekeko.aspectj
-             [weaverworld :as w]
-             [soot :as ajsoot]]
-            [damp.ekeko.soot
-             [soot :as jsoot]])
+    [ekeko-ajfx.debug :as dbg]
+    [damp.ekeko.aspectj
+     [weaverworld :as w]
+     [soot :as ajsoot]]
+    [damp.ekeko.soot
+     [soot :as jsoot]])
   (:use [inspector-jay.core]
-        [clojure.repl]
-        [damp.ekeko logic]
-        [damp.ekeko]
-        [ekeko-ajfx.soot]
-        [ekeko-ajfx.analysis])
+    [clojure.repl]
+    [damp.ekeko logic]
+    [damp.ekeko]
+    [ekeko-ajfx.soot]
+    [ekeko-ajfx.analysis]
+    )
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
@@ -31,9 +33,11 @@
          (w/advice ?adv))))
 
 (defn get-all-advice-and-shadows []
-  (set (ekeko [?adv ?meth]
-         (w/advice ?adv)
-         (w/advice-shadow ?adv ?meth))))
+  (set (ekeko [?adv-soot ?meth]
+         (l/fresh [?adv]
+           (w/advice ?adv)
+           (w/advice-shadow ?adv ?meth)
+           (ajsoot/advice-soot|method ?adv ?adv-soot)))))
 
 (defn get-all-advice-bodies []
   (set (ekeko [?method]
@@ -52,14 +56,30 @@
         close (-> str (.lastIndexOf ")"))
         ?sig (subs str (inc open) close)
         query (ekeko [?m] (ekeko-ajfx.soot/soot|method-sig ?m ?sig))]
-    ((first query))))
+    (first (first query))))
+
+(defn write-advice-shadows []
+  (let [pairs (for [x (get-all-advice-and-shadows)] 
+                [(-> (first x) .getSignature)
+                 (-> (get-method-from-shadow (second x)) .getSignature)])]
+    (spit "advice-shadow-pairs.txt" (pr-str (into [] pairs)))))
+
+(defn read-advice-shadows []
+  (let [pairs (load-file "advice-shadow-pairs.txt")]
+    (set (for [x pairs]
+          [(first (first (ekeko [?m] (ekeko-ajfx.soot/soot|method-sig-full ?m (first x)))))
+           (first (first (ekeko [?m] (ekeko-ajfx.soot/soot|method-sig-full ?m (second x)))))]))))
 
 (comment
-
+  (write-advice-shadows)
+  (inspect (read-advice-shadows))
+  
+  
   (inspect (new java.io.File "."))
   (inspect (get-all-advice))
   (inspect (get-method-from-shadow 
-             (nth (for [x (get-all-advice-and-shadows)] (second x)) 6)))
+             (nth (for [x (get-all-advice-and-shadows)] (second x)) 0)))
+  (inspect (get-all-advice-and-shadows))
   (inspect (get-all-advice-bodies))
   (count (get-all-advice-bodies))
   (inspect (get-all-bodies))
@@ -81,43 +101,10 @@
     (let [q (ekeko [?a] (soot|method-name ?a "newShip"))
           method (first (first q))]
       method))
+  
+  (clojure.stacktrace/root-cause *e)
   )
 
-;(defn advice []
-;  (ek/ekeko [?advice]
-;            (wea/advice 
-;              ?advice)))
-;
-;(defn shadow []
-;  (ek/ekeko [?shadow]
-;            (wea/shadow 
-;              ?shadow)))
-;
-;(defn advice-shadow []
-;  (ek/ekeko [?advice ?shadow]
-;            (wea/advice-shadow 
-;              ?advice 
-;              ?shadow)))
-;
-;(defn method []
-;  (ek/ekeko [?method]
-;            (wea/method 
-;              ?method)))
-;
-;(defn shadow|invocation-method|called
-;  "Returns the BcelMethod referenced within the provided shadow"
-;  ([] (map 
-;        (fn[x](vector 
-;                (first x) 
-;                (shadow|invocation-method|called (first x)))) 
-;        (shadow)))
-;  ([shadow] (first(first(filter 
-;                          (fn [x] (.contains (.toString shadow) (.toString (first x)))) 
-;                          (method))))))
-;
-;(defn bceladvice|aspect [advice]
-;  (ek/ekeko [?aspect]
-;            (wea/aspect-advice ?aspect advice)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -130,82 +117,28 @@
 ;    (jsoot/soot-unit :JIdentityStmt ?unit)))
 
 ; Find the calls in a particular method
-(inspect 
-  (ekeko [?b]
-    (l/fresh [?a ?callee ?recv]
-             (jsoot/soot|method-soot|unit ?a ?b)
-             (soot|method-name ?a "helperMethod")
-             (method-methodCalls ?a ?callee ?b ?recv))))
+;(inspect 
+;  (ekeko [?b]
+;    (l/fresh [?a ?callee ?recv]
+;             (jsoot/soot|method-soot|unit ?a ?b)
+;             (soot|method-name ?a "helperMethod")
+;             (method-methodCalls ?a ?callee ?b ?recv))))
 
 ;;;;;;;;;;;;;;;
-(ekeko-ajfx.diagram/reset-obj-id)
-(-> ekeko-ajfx.analysis/started-analysis .clear)
-(let [q (ekeko [?a] (soot|method-name ?a "getSize"))
-      method (first (first q))
-      frame (infer-frame method)]
-  frame)
+;(ekeko-ajfx.diagram/reset-obj-id)
+;(-> ekeko-ajfx.analysis/started-analysis .clear)
+;(let [q (ekeko [?a] (soot|method-name ?a "getSize"))
+;      method (first (first q))
+;      frame (infer-frame method)]
+;  frame)
 ;;;;;;;;;;;;;;
 
+;(inspect
+;  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
+;        method (first (first q))]
+;    (new LoopNestTree (-> method .getActiveBody))))
 
-(inspect (clojure.stacktrace/root-cause *e))
-
-(inspect
-  (let [q (ekeko [?a] (soot|method-name ?a "ajc$perObjectBind"))
-        method (first (first q))]
-    (-> method .getActiveBody .getUnits)))
-
-
-(inspect
-  (let [q (ekeko [?a] (soot|method-name ?a "helper3"))
-        method (first (first q))]
-    method))
-
-(ekeko [?a ?b] (soot|method-name ?a ?b))
-
-(inspect
-  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
-        method (first (first q))]
-    (new LoopNestTree (-> method .getActiveBody))))
-
-(let [q (ekeko [?a] (soot|method-name ?a "helper"))
-        method (first (first q))
-        body (-> method .getActiveBody)]
-    (showBlockCFG body))
-
-(inspect 
-  (ekeko
-    [?b ?a]
-    (l/fresh []
-             (jsoot/soot|method-soot|unit ?a ?b)
-             (soot|method-name ?a "helper")
-             )))
-
-(inspect 
-  (ekeko
-    [?b ?c]
-    (l/fresh [?a]
-             (jsoot/soot|method-soot|unit ?a ?b)
-             (jsoot/soot-unit :JAssignStmt ?b)
-             (soot|method-name ?a "start")
-             (equals ?c (.getLeftOp ?b))
-             )))
-
-(inspect 
-     (ekeko [?a ?b ?c ?d]
-                       (l/fresh []
-                       (virtMethodCall-receiver ?a ?b)
-                       (jsoot/soot|method-soot|unit ?c ?b)
-                       (jsoot/soot-method-units ?c ?d)
-                       ;(equals ?d (.getSignature ?c)
-                               )))
-
-(inspect 
-     (ekeko [?b ?c ?d ?e]
-                       (l/fresh [?a]
-                       (advice-soot|unit ?a ?b)
-                       (equals ?c (.getUseBoxes ?b))
-                       (equals ?d (type ?b))
-                       (jsoot/soot-unit :JIdentityStmt ?b)
-                       (equals ?e (.getLeftOp ?b))
-                               )))
-)
+;(let [q (ekeko [?a] (soot|method-name ?a "helper"))
+;        method (first (first q))
+;        body (-> method .getActiveBody)]
+;    (showBlockCFG body))
