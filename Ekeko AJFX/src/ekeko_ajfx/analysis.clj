@@ -7,15 +7,14 @@
     [clojure.core.memoize])
   (:require 
     [ekeko-ajfx.diagram :as d]
-    [ekeko-ajfx.library :as l])
+    [ekeko-ajfx.library :as l]
+    [ekeko-ajfx.debug :as dbg])
   (:import
     [java.util HashSet]
     [soot SootMethod Unit PatchingChain PrimType] 
     [soot.jimple IdentityStmt Stmt ThisRef ParameterRef ReturnStmt]
     [soot.jimple.internal JimpleLocal JInvokeStmt JStaticInvokeExpr JIfStmt JGotoStmt JAssignStmt 
      JInstanceFieldRef JNewExpr JTableSwitchStmt JIdentityStmt JNewArrayExpr JArrayRef]))
-
-(defmacro dbg[x] `(let [x# ~x] (println " dbg:" '~x "=" x#) x#))
 
 (declare infer-frame)
 (declare infer-frame-helper)
@@ -161,7 +160,7 @@
   (let [mapped-roots (d/multi-apply 
                        {(first (d/find-objs-by-name call-diag d/ANY-OBJ)) (d/find-objs-by-name ctxt-diag d/ANY-OBJ)}
                        (fn [m root] 
-                         (let [index (.indexOf formals (subs (name root) 1))] 
+                         (let [index (.indexOf (dbg formals) (subs (name root) 1))] 
                            (if (not= index -1)
                              (let [actual (nth actuals index)
                                    ignorable (or 
@@ -302,9 +301,12 @@
                       (-> unit .getLeftOp .getName)
                       nil)
         call-diagram (infer-frame method)
-        actuals (concat [(if (not (instance? JStaticInvokeExpr (-> unit .getInvokeExpr)))
-                           (-> unit .getInvokeExpr .getBase)) ; receiver object, which you can also consider an (implicit) actual argument 
-                         (-> unit .getInvokeExpr .getArgs)]) ; actual arguments
+        actuals (concat 
+                  (if (not (instance? JStaticInvokeExpr (-> unit .getInvokeExpr)))
+                    [(-> unit .getInvokeExpr .getBase)]) 
+                  (dbg (-> unit .getInvokeExpr .getArgs))
+                  ) ; actual arguments
+        ;tmp (dbg method) 
         mapping-results (compute-mappings call-diagram ctxt-diagram (call-diagram :formals) actuals)
         call2ctxt (first mapping-results)
         new-ctxt-diagram (assoc ctxt-diagram :may-read (second mapping-results)) 
@@ -326,7 +328,7 @@
 (-> started-analysis .clear)
 
 (defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
-  (let [dbg (dbg unit)
+  (let [dbg (dbg/d unit)
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
@@ -343,7 +345,7 @@
         next-diagram (if (sequential? next)
                        (first next)
                        next)
-        ;tmp (println next-diagram)
+        tmp (println next-diagram)
         ]
     (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
       (infer-frame-helper next-diagram units next-unit end-unit)
@@ -368,16 +370,48 @@
 (defn clear-cache []
   (memo-clear! infer-frame))
 
-(def infer-frame 
+(def infer-frame
   (memo (fn [^SootMethod method]
           "Infer the aliasing diagram of a given method body
            (from which you can determine the body's frame condition)"
           (if (-> method .hasActiveBody)
             (infer-frame-from-scratch method)
             (let []
-              (println "!! No body for method " method)
+              ;(println "!! No body for method " method)
               (l/get-frame-from-library method))))))
 
+
+
+(defn get-clauses-from-diagram [diagram]
+  (let [roots (for [x (filter
+                        (fn [x] (and 
+                                  (-> (name x) (.startsWith  "@"))
+                                  (contains? 
+                                    (diagram :formals)
+                                    (subs (name x) 1))))
+                        (keys (diagram :names)))] [x])
+        
+        root-map (d/multi-apply
+                   {}
+                   (fn [m x]
+                     (assoc m 
+                       (first (d/find-objs-by-name diagram x))
+                       (subs (name x) 1)))
+                   (for [x roots] [x]))
+        
+        get-assignable (fn [read-edges read-paths clause]
+                         (let [cur-obj (first (clojure.set/intersection 
+                                            (set (keys read-edges))
+                                            (set (keys read-paths))))])
+                         )]
+    (get-assignable (diagram :may-read) root-map []))) 
+
+;(defn infer-frame-slow [^SootMethod method]
+;  (if (-> method .hasActiveBody)
+;    (infer-frame-from-scratch method)
+;    (let []
+;      (println "!! No body for method " method)
+;      (l/get-frame-from-library method))))
 
 ;(let [diagram (-> (d/new-diagram ["a" "b" "c"])
 ;                (d/add-object #{"bla"})

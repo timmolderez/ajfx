@@ -116,6 +116,19 @@
     (jsoot/soot :method ?method)
     (equals ?name (.getName ?method))))
 
+(defn- method-signature [method]
+  (let [split (clojure.string/split (-> method .getSubSignature) #" ")
+        cls (-> method .getDeclaringClass)]
+    (str (first split) " " cls "." (second split))))
+
+(defn 
+  soot|method-sig
+  "Relate a SootMethod to its signature (String)"
+  [?method ?sig]
+  (l/all
+    (jsoot/soot :method ?method)
+    (equals ?sig (method-signature ?method))))
+
 (defn 
   soot|field-name
   "Relate a soot field to its name"

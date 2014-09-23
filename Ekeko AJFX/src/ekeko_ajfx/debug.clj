@@ -30,8 +30,12 @@
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
-; Debugging macro, any function can be wrapped in (dbg ) 
-(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
+(def VERBOSE true)
+
+; Debugging macro, any function can be wrapped in (d ) 
+(defmacro d[x] (if VERBOSE
+                 `(let [x# ~x] (println "dbg:" '~x "=" x#) x#)
+                 x)) 
 
 (defn showUnitCFG
   "Use Ekeko's visualizer to show the unit control-flow graph of a Soot Body"
