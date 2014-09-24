@@ -4,7 +4,7 @@
 ekeko-ajfx.core
   (:refer-clojure :exclude [== type declare class])
   (:require [clojure.core.logic :as l]
-    [ekeko-ajfx.debug :as dbg]
+    [ekeko-ajfx.util :as dbg]
     [damp.ekeko.aspectj
      [weaverworld :as w]
      [soot :as ajsoot]]
@@ -102,12 +102,8 @@ ekeko-ajfx.core
           method (first (first q))]
       method))
   
-  (clojure.stacktrace/root-cause *e)
-  )
+  (clojure.stacktrace/root-cause *e))
 
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Scratch pad ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;
 ; Get the units of a particular method

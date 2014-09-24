@@ -8,7 +8,7 @@
   (:require 
     [ekeko-ajfx.diagram :as d]
     [ekeko-ajfx.library :as l]
-    [ekeko-ajfx.debug :as dbg])
+    [ekeko-ajfx.util :as dbg])
   (:import
     [java.util HashSet]
     [soot SootMethod Unit PatchingChain PrimType] 

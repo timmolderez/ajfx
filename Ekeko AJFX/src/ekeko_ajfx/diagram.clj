@@ -16,7 +16,6 @@
   ekeko-ajfx.diagram
   (:use [inspector-jay.core]))
 
-(defmacro dbg[x] `(let [x# ~x] (println "dbg:" '~x "=" x#) x#))
 
 (def ANY-OBJ "%ANY")
 
@@ -196,10 +195,6 @@
            (assoc (second pair) key compl))]))
     (for [x (clojure.set/union (set (keys one)) (set (keys two)))] [x])))
 
-;(intersect-edges
-;  {:1 #{[:4 "f"] [:3 "g"] [:4 "g"] [:5 "h"]} :2 #{[:1 "f"] [:3 "g"]}} 
-;  {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})
-
 (defn merge-diagrams [d1 d2]
   (let [new-diag (new-diagram [])
         merged-names (multi-apply (d1 :names)
@@ -221,3 +216,7 @@
       (assoc :may-mod merged-mays)
       (assoc :must-mod merged-musts)
       (assoc :return (clojure.set/union (d1 :return) (d2 :return))))))
+
+;(intersect-edges
+;  {:1 #{[:4 "f"] [:3 "g"] [:4 "g"] [:5 "h"]} :2 #{[:1 "f"] [:3 "g"]}} 
+;  {:1 #{[:2 "f"] [:3 "g"]} :2 #{[:1 "f"] [:3 "g"]} :3 #{[:1 "f"] [:3 "g"]}})

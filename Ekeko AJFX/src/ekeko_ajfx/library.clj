@@ -21,8 +21,6 @@
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
-(defmacro dbg[x] `(let [x# ~x] (println " dbg:" '~x "=" x#) x#))
-
 (def frame-library {:Test
                     {:helper3 (d/new-diagram [])}
                     :helper4 (-> (d/new-diagram [])
