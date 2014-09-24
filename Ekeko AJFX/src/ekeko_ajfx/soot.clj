@@ -8,7 +8,8 @@
              [weaverworld :as w]
              [soot :as ajsoot]]
             [damp.ekeko.soot
-             [soot :as jsoot]])
+             [soot :as jsoot]]
+            [ekeko-ajfx.util :as dbg])
   (:use [inspector-jay.core]
         [clojure.repl]
         [damp.ekeko logic]
@@ -116,10 +117,12 @@
     (jsoot/soot :method ?method)
     (equals ?name (.getName ?method))))
 
-(defn- method-signature [method]
+(defn method-signature [method]
+  "Converts a signature from a SootMethod to the format used in join point shadows" 
   (let [split (clojure.string/split (-> method .getSubSignature) #" ")
-        cls (-> method .getDeclaringClass)]
-    (str (first split) " " cls "." (second split))))
+        cls (-> method .getDeclaringClass)
+        meth (clojure.string/replace (second split) #"," ", ")]
+    (str (first split) " " cls "." meth)))
 
 (defn 
   soot|method-sig
@@ -136,6 +139,24 @@
   (l/all
     (jsoot/soot :method ?method)
     (equals ?sig (-> ?method .getSignature))))
+
+(defn strip-advice-id [sig]
+  (let [end-id (-> sig (.lastIndexOf "("))
+        substr (subs sig 0 end-id)
+        begin-id (-> substr (.lastIndexOf "$"))]
+    (if (= begin-id -1)
+      sig
+      (str 
+        (subs sig 0 begin-id)
+        (subs sig end-id)))))
+
+(defn 
+  soot|advice-sig-full
+  "Relate a SootMethod of an advice to its complete signature (disregarding the ID number (?) that's in there)"
+  [?method ?sig]
+  (l/all
+    (jsoot/soot :method ?method)
+    (equals (strip-advice-id ?sig) (strip-advice-id (-> ?method .getSignature)))))
 
 (defn 
   soot|field-name

@@ -160,7 +160,7 @@
   (let [mapped-roots (d/multi-apply 
                        {(first (d/find-objs-by-name call-diag d/ANY-OBJ)) (d/find-objs-by-name ctxt-diag d/ANY-OBJ)}
                        (fn [m root] 
-                         (let [index (.indexOf (dbg formals) (subs (name root) 1))] 
+                         (let [index (.indexOf formals (subs (name root) 1))] 
                            (if (not= index -1)
                              (let [actual (nth actuals index)
                                    ignorable (or 
@@ -304,8 +304,7 @@
         actuals (concat 
                   (if (not (instance? JStaticInvokeExpr (-> unit .getInvokeExpr)))
                     [(-> unit .getInvokeExpr .getBase)]) 
-                  (dbg (-> unit .getInvokeExpr .getArgs))
-                  ) ; actual arguments
+                  (-> unit .getInvokeExpr .getArgs))
         ;tmp (dbg method) 
         mapping-results (compute-mappings call-diagram ctxt-diagram (call-diagram :formals) actuals)
         call2ctxt (first mapping-results)
@@ -328,7 +327,7 @@
 (-> started-analysis .clear)
 
 (defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
-  (let [dbg (dbg/d unit)
+  (let [;dbg (dbg/d unit)
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
@@ -345,40 +344,43 @@
         next-diagram (if (sequential? next)
                        (first next)
                        next)
-        tmp (println next-diagram)
+        ;tmp (println next-diagram)
         ]
     (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
       (infer-frame-helper next-diagram units next-unit end-unit)
       next-diagram)))
 
-(defn infer-frame-from-scratch [^SootMethod method]
-  (println "Analysing method:" method)
-  (let [body (-> method .getActiveBody)
-        units (-> body .getUnits)
-        diagram (-> (d/new-diagram [])
-                  (d/add-object [d/ANY-OBJ]))]
-    (if (-> started-analysis (.contains method))
-      (let [] 
-        (println "recursive call!" method)
-        diagram)
-      (let []
-        (-> started-analysis (.add method))
-        (let [frame (infer-frame-helper diagram units (-> units .getFirst) nil)]
-          (-> started-analysis (.remove method))
-          frame)))))
+(def infer-frame-from-scratch 
+  (memo (fn [^SootMethod method]
+          (println "Analysing method:" method)
+          (let [body (-> method .getActiveBody)
+                units (-> body .getUnits)
+                diagram (-> (d/new-diagram [])
+                          (d/add-object [d/ANY-OBJ]))]
+            (if (-> started-analysis (.contains method))
+              (let [] 
+                (println "recursive call!" method)
+                diagram)
+              (let []
+                (-> started-analysis (.add method))
+                (let [frame (infer-frame-helper diagram units (-> units .getFirst) nil)]
+                  (-> started-analysis (.remove method))
+                  frame)))))))
 
 (defn clear-cache []
-  (memo-clear! infer-frame))
+  (memo-clear! infer-frame-from-scratch))
 
-(def infer-frame
-  (memo (fn [^SootMethod method]
-          "Infer the aliasing diagram of a given method body
+(defn infer-frame [^SootMethod method]
+  "Infer the aliasing diagram of a given method body
            (from which you can determine the body's frame condition)"
-          (if (-> method .hasActiveBody)
-            (infer-frame-from-scratch method)
-            (let []
-              ;(println "!! No body for method " method)
-              (l/get-frame-from-library method))))))
+  (if (or 
+        (not (-> method .hasActiveBody))
+        (= (-> method .getName) "ajc$perObjectBind")) ; No idea why, but this particular method makes the memo cache throw an NPE..
+    (let []
+      ;(println "!! No body for method " method)
+      (l/get-frame-from-library method))
+    (infer-frame-from-scratch method)
+    ))
 
 
 

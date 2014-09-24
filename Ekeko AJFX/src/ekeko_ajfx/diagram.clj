@@ -19,7 +19,7 @@
 
 (def ANY-OBJ "%ANY")
 
-"Ensures all objects within a graph have a unique identifier"
+; Ensures all objects within a graph have a unique identifier
 (def last-obj-id (atom 0))
 
 (defn reset-obj-id []

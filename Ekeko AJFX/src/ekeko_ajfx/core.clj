@@ -59,21 +59,47 @@ ekeko-ajfx.core
     (first (first query))))
 
 (defn write-advice-shadows []
-  (let [pairs (for [x (get-all-advice-and-shadows)] 
-                [(-> (first x) .getSignature)
-                 (-> (get-method-from-shadow (second x)) .getSignature)])]
-    (spit "advice-shadow-pairs.txt" (pr-str (into [] pairs)))))
+  (let [pairs (for [x (get-all-advice-and-shadows)]
+                (try
+                  [(-> (first x) .getSignature)
+                   (-> (get-method-from-shadow (second x)) .getSignature)]
+                  (catch Exception e (println "!!! No body found for shadow:" (second x)))))
+        filtered (remove (fn [x] (= x nil))
+                   pairs)]
+    (spit "advice-shadow-pairs.txt" (pr-str (into [] filtered)))))
+
+;(inspect (get-method-from-shadow
+;           (second (nth (into [] (get-all-advice-and-shadows)) 55))))
 
 (defn read-advice-shadows []
   (let [pairs (load-file "advice-shadow-pairs.txt")]
-    (set (for [x pairs]
-          [(first (first (ekeko [?m] (ekeko-ajfx.soot/soot|method-sig-full ?m (first x)))))
-           (first (first (ekeko [?m] (ekeko-ajfx.soot/soot|method-sig-full ?m (second x)))))]))))
+    (into [] (set (for [x pairs]
+                  [(first (first (ekeko [?m] (ekeko-ajfx.soot/soot|advice-sig-full ?m (first x)))))
+                   (first (first (ekeko [?m] (ekeko-ajfx.soot/soot|method-sig-full ?m (second x)))))])))))
+
+(defn do-complete-analysis []
+  (ekeko-ajfx.diagram/reset-obj-id)
+  (-> ekeko-ajfx.analysis/started-analysis .clear)
+  (ekeko-ajfx.analysis/clear-cache)
+  (let [pairs (read-advice-shadows)
+        analysed-pairs (for [x pairs]
+                         [(first x) (infer-frame (first x)) 
+                          (second x) (infer-frame (second x))])
+        compared-pairs (for [x analysed-pairs]
+                         (let [adv-clause (get-clauses-from-diagram (nth x 1))
+                               shadow-clause (get-clauses-from-diagram (nth x 3))
+                               comparison (ekeko-ajfx.analysis/compare-assignable-clauses 
+                                            (second shadow-clause)
+                                            (first adv-clause))]
+                           [(nth x 0) (nth x 2) comparison]))]
+    compared-pairs))
 
 (comment
   (write-advice-shadows)
-  (inspect (read-advice-shadows))
+  (clojure.core/type (read-advice-shadows))
   
+  (dbg/with-timeout 500 (time (do-analysis (second (nth (read-advice-shadows) 11)))))
+  (do-complete-analysis)
   
   (inspect (new java.io.File "."))
   (inspect (get-all-advice))
@@ -98,7 +124,7 @@ ekeko-ajfx.core
             (-> (first x) .getSourceLocation)))
   
   (inspect
-    (let [q (ekeko [?a] (soot|method-name ?a "newShip"))
+    (let [q (ekeko [?a] (soot|method-name ?a "ajc$perObjectBind"))
           method (first (first q))]
       method))
   
@@ -107,7 +133,7 @@ ekeko-ajfx.core
 
 ;
 ; Get the units of a particular method
-;(inspect
+;;(inspect
 ;  (damp.ekeko/ekeko
 ;    [?unit]
 ;    (jsoot/soot-unit :JIdentityStmt ?unit)))
@@ -119,7 +145,6 @@ ekeko-ajfx.core
 ;             (jsoot/soot|method-soot|unit ?a ?b)
 ;             (soot|method-name ?a "helperMethod")
 ;             (method-methodCalls ?a ?callee ?b ?recv))))
-
 ;;;;;;;;;;;;;;;
 ;(ekeko-ajfx.diagram/reset-obj-id)
 ;(-> ekeko-ajfx.analysis/started-analysis .clear)
@@ -128,12 +153,10 @@ ekeko-ajfx.core
 ;      frame (infer-frame method)]
 ;  frame)
 ;;;;;;;;;;;;;;
-
 ;(inspect
 ;  (let [q (ekeko [?a] (soot|method-name ?a "helper"))
 ;        method (first (first q))]
 ;    (new LoopNestTree (-> method .getActiveBody))))
-
 ;(let [q (ekeko [?a] (soot|method-name ?a "helper"))
 ;        method (first (first q))
 ;        body (-> method .getActiveBody)]
