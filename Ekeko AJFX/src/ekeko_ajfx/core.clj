@@ -4,7 +4,7 @@
 ekeko-ajfx.core
   (:refer-clojure :exclude [== type declare class])
   (:require [clojure.core.logic :as l]
-    [ekeko-ajfx.util :as dbg]
+    [ekeko-ajfx.util :as u]
     [damp.ekeko.aspectj
      [weaverworld :as w]
      [soot :as ajsoot]]
@@ -20,7 +20,8 @@ ekeko-ajfx.core
   (:import [soot.jimple IdentityStmt]
     [soot.jimple.internal JimpleLocal]
     [soot.jimple ThisRef ParameterRef]
-    [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]))
+    [soot.toolkits.graph ExceptionalUnitGraph BriefBlockGraph ExceptionalBlockGraph LoopNestTree]
+    [java.util.concurrent TimeoutException]))
 
 (defn do-analysis [method]
   (ekeko-ajfx.diagram/reset-obj-id)
@@ -81,24 +82,41 @@ ekeko-ajfx.core
   (ekeko-ajfx.diagram/reset-obj-id)
   (-> ekeko-ajfx.analysis/started-analysis .clear)
   (ekeko-ajfx.analysis/clear-cache)
-  (let [pairs (read-advice-shadows)
+  (let [pairs (take 5 (read-advice-shadows))
+        analyze-timed (fn [x]
+                        (try
+                          (u/with-timeout 5000 (infer-frame x))
+                          (catch TimeoutException e (println "!!! Analysis of" x "timed out!"))))
+        get-assignable (fn [x]
+                         (if (not= x nil)
+                           (second (get-clauses-from-diagram x))))
         analysed-pairs (for [x pairs]
-                         [(first x) (infer-frame (first x)) 
-                          (second x) (infer-frame (second x))])
-        compared-pairs (for [x analysed-pairs]
-                         (let [adv-clause (get-clauses-from-diagram (nth x 1))
-                               shadow-clause (get-clauses-from-diagram (nth x 3))
-                               comparison (ekeko-ajfx.analysis/compare-assignable-clauses 
-                                            (second shadow-clause)
-                                            (first adv-clause))]
-                           [(nth x 0) (nth x 2) comparison]))]
-    compared-pairs))
+                         [(first x) 
+                          (get-assignable (analyze-timed (first x))) 
+                          (second x) 
+                          (get-assignable (analyze-timed (second x)))])
+        ;        compared-pairs (for [x analysed-pairs]
+        ;                         (let [adv-clause (get-clauses-from-diagram (nth x 1))
+        ;                               shadow-clause (get-clauses-from-diagram (nth x 3))
+        ;                               comparison (ekeko-ajfx.analysis/compare-assignable-clauses 
+        ;                                            (second shadow-clause)
+        ;                                            (first adv-clause))]
+        ;                           [(nth x 0) (nth x 2) comparison]))
+        
+;        compared-pairs (for [x analysed-pairs]
+;                         (let [adv-clause (get-clauses-from-diagram (nth x 1))
+;                               shadow-clause (get-clauses-from-diagram (nth x 3))]
+;                           [(nth x 0) adv-clause (nth x 2) shadow-clause]))
+        ]
+    analysed-pairs))
 
 (comment
   (write-advice-shadows)
-  (clojure.core/type (read-advice-shadows))
+  (read-advice-shadows)
   
-  (dbg/with-timeout 500 (time (do-analysis (second (nth (read-advice-shadows) 11)))))
+  (inspect (do-complete-analysis))
+  
+  (u/with-timeout 3000 (time (get-clauses-from-diagram (do-analysis (second (nth (read-advice-shadows) 1))))))
   (do-complete-analysis)
   
   (inspect (new java.io.File "."))

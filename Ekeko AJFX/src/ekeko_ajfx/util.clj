@@ -115,6 +115,7 @@
                            (ajsoot/advice-soot|method ?advice ?method)))
            n)))
 
+; Taken from https://github.com/flatland/clojail/blob/master/src/clojail/core.clj
 (def ^{:doc "Create a map of pretty keywords to ugly TimeUnits"}
   uglify-time-unit
   (into {} (for [[enum aliases] {TimeUnit/NANOSECONDS [:ns :nanoseconds]
@@ -155,23 +156,9 @@
           (throw e))
         (finally (when tg (.stop tg)))))))
 
-; Taken from https://github.com/flatland/clojail/blob/master/src/clojail/core.clj
-(defn- call-with-timeout [time-limit-in-msec proc]
-  "Create a thunk that returns true if given time-limit-in-msec has been
-  elapsed and calls proc with the thunk as an argument. Returns a 3 elements
-  vec: A proc result, given time-limit-in-msec has been elapsed or not
-  elapsed time in millisecond."
-  (let [timed-out (atom false)
-        start! (fn []
-                 (future (do
-                           (Thread/sleep time-limit-in-msec)
-                           (swap! timed-out (constantly true)))))
-        timed-out? (fn [] @timed-out)
-        started-at (System/nanoTime)]
-    (start!)
-    [(proc timed-out?)
-     @timed-out
-     (/ (double (- (System/nanoTime) started-at)) 1000000.0)]))
+;(defmacro time-limited [ms & body]
+;  `(let [f# (future ~@body)]
+;     (.get f# ~ms java.util.concurrent.TimeUnit/MILLISECONDS)))
 
 ;(showBlockCFG (-> (getAdviceN 0) .getActiveBody))
 ;(inspect (-> (getAdviceN 0) .getActiveBody))

@@ -40,7 +40,7 @@
                 (concat root-names names)
                 (concat id-sets id-sets))]
     {:names names
-     :formals [] 
+     :formals []
     :must-mod {}
     :may-mod {}
     :may-read {}

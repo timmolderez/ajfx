@@ -8,7 +8,7 @@
   (:require 
     [ekeko-ajfx.diagram :as d]
     [ekeko-ajfx.library :as l]
-    [ekeko-ajfx.util :as dbg])
+    [ekeko-ajfx.util :as u])
   (:import
     [java.util HashSet]
     [soot SootMethod Unit PatchingChain PrimType] 
@@ -377,7 +377,7 @@
         (not (-> method .hasActiveBody))
         (= (-> method .getName) "ajc$perObjectBind")) ; No idea why, but this particular method makes the memo cache throw an NPE..
     (let []
-      ;(println "!! No body for method " method)
+      (println "!!! No body for method " method)
       (l/get-frame-from-library method))
     (infer-frame-from-scratch method)
     ))
@@ -389,9 +389,11 @@
                         (fn [x] (and 
                                   (-> (name x) (.startsWith  "@"))
                                   (contains? 
-                                    (diagram :formals)
-                                    (subs (name x) 1))))
-                        (keys (diagram :names)))] [x])
+                                    (set (diagram :formals))
+                                    (subs (name x) 1))
+                                  ))
+                        (keys (diagram :names)))] 
+                [x])
         
         root-map (d/multi-apply
                    {}
@@ -399,32 +401,34 @@
                      (assoc m 
                        (first (d/find-objs-by-name diagram x))
                        (subs (name x) 1)))
-                   (for [x roots] [x]))
+                   roots)
         
         get-assignable (fn [read-edges read-paths clause]
-                         (if (empty? read-edges)
-                           [read-paths clause]
-                           (let [cur-obj (first (clojure.set/intersection 
-                                                  (set (keys read-edges))
-                                                  (set (keys read-paths))))
-                                 cur-path (read-paths cur-obj)
-                                 new-read-paths (d/multi-apply
-                                                  read-paths
-                                                  (fn [r edge]
-                                                    (assoc r (first edge) (str cur-path "." (second edge))))
-                                                  (read-edges cur-obj))
-                                 new-clause (d/multi-apply
-                                              clause
-                                              (fn [c edge]
-                                                (conj c (str (read-paths cur-obj) "." (second edge))))
-                                              (clojure.set/union 
-                                                ((diagram :may-mod) cur-obj)
-                                                ((diagram :must-mod) cur-obj)
-                                                ))]
-                             (recur 
-                               (dissoc read-edges cur-obj)
-                               new-read-paths
-                               new-clause))))]
+                         (let [worklist (clojure.set/intersection 
+                                          (set (keys read-edges))
+                                          (set (keys read-paths)))]
+                           (if (empty? worklist)
+                             [read-paths clause]
+                             (let [cur-obj (first worklist)
+                                   cur-path (read-paths cur-obj)
+                                   new-read-paths (d/multi-apply
+                                                    read-paths
+                                                    (fn [r tgt label]
+                                                      (assoc r tgt (str cur-path "." label)))
+                                                    (read-edges cur-obj))
+                                   new-clause (d/multi-apply
+                                                clause
+                                                (fn [c tgt label]
+                                                  (conj c (str (read-paths cur-obj) "." label)))
+                                                (clojure.set/union 
+                                                  ((diagram :may-mod) cur-obj)
+                                                  ((diagram :must-mod) cur-obj)
+                                                  ))]
+                               (recur 
+                                 (dissoc read-edges cur-obj)
+                                 new-read-paths
+                                 new-clause))
+                             )))]
     (get-assignable (diagram :may-read) root-map [])))
 
 (defn compare-assignable-clauses [master slave]
