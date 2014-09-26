@@ -75,7 +75,14 @@ ekeko-ajfx.core
                   [(first (first (ekeko [?m] (ekeko-ajfx.soot/soot|advice-sig-full ?m (first x)))))
                    (first (first (ekeko [?m] (ekeko-ajfx.soot/soot|method-sig-full ?m (second x)))))])))))
 
-(defn do-complete-analysis []
+(defn analyse-all-advice-shadow-pairs []
+  "Infer the assignable clause of each advice and its shadows.
+   (!! There currently is no reliable way to relate a shadow to its SootMethod, so it might skip a few shadows..)
+   Produces a list of 4-tuples:
+   1 - advice (SootMethod)
+   2 - assignable clause of the advice
+   3 - shadow of the advice (SootMethod)
+   4 - assignable clause of the shadow" 
   (ekeko-ajfx.diagram/reset-obj-id)
   (-> ekeko-ajfx.analysis/started-analysis .clear)
   (ekeko-ajfx.analysis/clear-cache)
@@ -95,39 +102,64 @@ ekeko-ajfx.core
                          [(first x) 
                           (get-assignable (analyze-timed (first x))) 
                           (second x) 
-                          (get-assignable (analyze-timed (second x)))])
-        ;        compared-pairs (for [x analysed-pairs]
-        ;                         (let [adv-clause (get-clauses-from-diagram (nth x 1))
-        ;                               shadow-clause (get-clauses-from-diagram (nth x 3))
-        ;                               comparison (ekeko-ajfx.analysis/compare-assignable-clauses 
-        ;                                            (second shadow-clause)
-        ;                                            (first adv-clause))]
-        ;                           [(nth x 0) (nth x 2) comparison]))
-        ]
+                          (get-assignable (analyze-timed (second x)))])]
+    analysed-pairs))
+
+(defn analyse-all-advice []
+  "Infer the assignable clause of all advice"
+  (ekeko-ajfx.diagram/reset-obj-id)
+  (-> ekeko-ajfx.analysis/started-analysis .clear)
+  (ekeko-ajfx.analysis/clear-cache)
+  (let [advice (get-all-advice-bodies)
+        analyze-timed (fn [x]
+                        (try
+                          (u/with-timeout 3000 (let []
+                                                 (println "   >>> Started analysing:" x)
+                                                 (infer-frame x)))
+                          (catch TimeoutException e (println "   !!! Analysis of" x "timed out!"))
+                          (catch Exception e (println "   !!!" e))))
+        get-assignable (fn [x]
+                         (if (not= x nil)
+                           (second (get-clauses-from-diagram x))))
+        analysed-pairs (for [x advice]
+                         [(first x)
+                          (get-assignable (analyze-timed (first x)))])]
+    analysed-pairs))
+
+(defn analyse-all-bodies []
+  "Infer the assignable clause of all SootMethods"
+  (ekeko-ajfx.diagram/reset-obj-id)
+  (-> ekeko-ajfx.analysis/started-analysis .clear)
+  (ekeko-ajfx.analysis/clear-cache)
+  (let [advice (get-all-bodies)
+        analyze-timed (fn [x]
+                        (try
+                          (u/with-timeout 3000 (let []
+                                                 (println "   >>> Started analysing:" x)
+                                                 (infer-frame x)))
+                          (catch TimeoutException e (println "   !!! Analysis of" x "timed out!"))
+                          (catch Exception e (println "   !!!" e))))
+        get-assignable (fn [x]
+                         (if (not= x nil)
+                           (second (get-clauses-from-diagram x))))
+        analysed-pairs (for [x advice]
+                         [(first x)
+                          (get-assignable (analyze-timed (first x)))])]
     analysed-pairs))
 
 (comment
-  (write-advice-shadows)
-  (inspect (read-advice-shadows))
-  
-  (let [] (inspect (do-complete-analysis)) nil)
-  (time (let [] (do-complete-analysis) nil))
-  (time (let [] (read-advice-shadows) nil))
-  
-  ;;;
+  (time (let [] (inspect (analyse-all-advice)) nil))
+  (time (let [] (inspect (analyse-all-bodies)) nil))
   
   (u/with-timeout 3000 (time (get-clauses-from-diagram 
-                               (do-analysis (first (nth (read-advice-shadows) 0))))))
-  (inspect (second (nth (read-advice-shadows) 6)))
-  
-  
-  (inspect (get-all-advice))
+                               (do-analysis (first (first (get-all-advice-bodies)))))))
+   
+  (count (get-all-advice))
   (inspect (get-method-from-shadow 
              (nth (for [x (get-all-advice-and-shadows)] (second x)) 0)))
   (inspect (get-all-advice-and-shadows))
-  (inspect (get-all-advice-bodies))
   (count (get-all-advice-bodies))
-  (inspect (get-all-bodies))
+  (count (get-all-bodies))
   
 
   

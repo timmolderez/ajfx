@@ -39,8 +39,7 @@
         names (zipmap
                 (concat root-names names)
                 (concat id-sets id-sets))]
-    {:method method-name
-     :names names
+    {:names names
      :formals []
     :must-mod {}
     :may-mod {}
@@ -48,7 +47,7 @@
     :return #{}}))
 
 (defn add-tag [diagram tag]
-  (assoc diagram)) 
+  (assoc diagram :tag tag)) 
 
 (defn add-name [diagram objects name]
   "A set of objects can now be referred to by an additional name."
