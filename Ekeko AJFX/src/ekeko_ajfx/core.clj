@@ -69,9 +69,6 @@ ekeko-ajfx.core
                    pairs)]
     (spit "advice-shadow-pairs.txt" (pr-str (into [] filtered)))))
 
-;(inspect (get-method-from-shadow
-;           (second (nth (into [] (get-all-advice-and-shadows)) 55))))
-
 (defn read-advice-shadows []
   (let [pairs (load-file "advice-shadow-pairs.txt")]
     (into [] (set (for [x pairs]
@@ -82,11 +79,15 @@ ekeko-ajfx.core
   (ekeko-ajfx.diagram/reset-obj-id)
   (-> ekeko-ajfx.analysis/started-analysis .clear)
   (ekeko-ajfx.analysis/clear-cache)
-  (let [pairs (take 5 (read-advice-shadows))
+  (let [pairs (read-advice-shadows)
         analyze-timed (fn [x]
                         (try
-                          (u/with-timeout 5000 (infer-frame x))
-                          (catch TimeoutException e (println "!!! Analysis of" x "timed out!"))))
+                          ;(infer-frame x)
+                          (u/with-timeout 3000 (let []
+                                                 (println "   >>> Started analysing:" x)
+                                                 (infer-frame x)))
+                          (catch TimeoutException e (println "   !!! Analysis of" x "timed out!"))
+                          (catch Exception e (println "   !!!" e))))
         get-assignable (fn [x]
                          (if (not= x nil)
                            (second (get-clauses-from-diagram x))))
@@ -102,24 +103,24 @@ ekeko-ajfx.core
         ;                                            (second shadow-clause)
         ;                                            (first adv-clause))]
         ;                           [(nth x 0) (nth x 2) comparison]))
-        
-;        compared-pairs (for [x analysed-pairs]
-;                         (let [adv-clause (get-clauses-from-diagram (nth x 1))
-;                               shadow-clause (get-clauses-from-diagram (nth x 3))]
-;                           [(nth x 0) adv-clause (nth x 2) shadow-clause]))
         ]
     analysed-pairs))
 
 (comment
   (write-advice-shadows)
-  (read-advice-shadows)
+  (inspect (read-advice-shadows))
   
-  (inspect (do-complete-analysis))
+  (let [] (inspect (do-complete-analysis)) nil)
+  (time (let [] (do-complete-analysis) nil))
+  (time (let [] (read-advice-shadows) nil))
   
-  (u/with-timeout 3000 (time (get-clauses-from-diagram (do-analysis (second (nth (read-advice-shadows) 1))))))
-  (do-complete-analysis)
+  ;;;
   
-  (inspect (new java.io.File "."))
+  (u/with-timeout 3000 (time (get-clauses-from-diagram 
+                               (do-analysis (first (nth (read-advice-shadows) 0))))))
+  (inspect (second (nth (read-advice-shadows) 6)))
+  
+  
   (inspect (get-all-advice))
   (inspect (get-method-from-shadow 
              (nth (for [x (get-all-advice-and-shadows)] (second x)) 0)))
@@ -128,10 +129,7 @@ ekeko-ajfx.core
   (count (get-all-advice-bodies))
   (inspect (get-all-bodies))
   
-  (let [advice (nth (for [x (get-all-advice-bodies)] (first x)) 10)]
-    (time (do-analysis advice)))
-  
-  (inspect (nth (for [x (get-all-advice-bodies)] (first x)) 9))
+
   
   (inspect (filter
              (fn [x]
@@ -141,12 +139,19 @@ ekeko-ajfx.core
   (inspect (for [x (get-all-advice)]
             (-> (first x) .getSourceLocation)))
   
-  (inspect
-    (let [q (ekeko [?a] (soot|method-name ?a "ajc$perObjectBind"))
-          method (first (first q))]
-      method))
+  (let [q (ekeko [?a] (soot|method-name ?a "thrust"))
+          method (first (nth (into [] q) 0))]
+      (do-analysis method))
   
-  (clojure.stacktrace/root-cause *e))
+  (let [q (ekeko [?a] (soot|method-name ?a "processQueue"))
+        method (first (nth (into [] q) 0))
+        units (-> method .getActiveBody)
+        ]
+    (inspect units)
+    ;(-> units (.follows (first units) (second units)))
+    )
+  
+  (inspect (clojure.stacktrace/root-cause *e)))
 
 
 ;

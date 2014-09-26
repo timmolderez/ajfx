@@ -101,9 +101,11 @@
       (instance? JInstanceFieldRef rhs) (field-read-stmt diagram lhs rhs)
       ; Assignment type: a[x] = b;
       (instance? JArrayRef lhs) (array-write-stmt diagram lhs rhs)
-      :else (println "Unrecognized type of assignment!"))))
+      :else (let [] (println "Unrecognized type of assignment:" unit "::" (diagram :tag))
+              diagram)
+      )))
 
-(defn if-stmt [diagram unit units]
+(defn if-stmt [diagram unit units end-unit]
   (let [begin-else (-> unit .getTarget)
         end-if (-> units (.getPredOf begin-else))
         has-else (instance? JGotoStmt end-if)
@@ -113,30 +115,46 @@
                          (if has-else
                            end-if
                            (-> units (.getSuccOf end-if))))
-        else-diagram (if has-else
+        else-diagram (if (and has-else (-> units (.follows (-> end-if .getTarget) end-if)))
                        (infer-frame-helper diagram units begin-else end-else)
                        diagram)
         merged-diagram (d/merge-diagrams if-diagram else-diagram)
-        next-unit (if has-else end-else begin-else)]
-    [merged-diagram next-unit]))
+        next-unit (if (and has-else (-> units (.follows (-> end-if .getTarget) end-if))) 
+                    end-else
+                    begin-else)
+        bounded-next-unit (if (and ; If next-unit goes outside the body being analysed, the analysis should stop here.
+                                (not= nil end-unit) 
+                                (-> units (.follows next-unit end-unit))) 
+                      nil
+                      next-unit)]
+    [merged-diagram bounded-next-unit]))
 
 (defn try-catch-stmt [diagram unit]
   [diagram (-> unit .getTarget)]) ; Don't change the diagram, and just skip the catch blocks..
 
-(defn loop-stmt [diagram unit units]
-  (let [end-loop-body (-> unit .getTarget)
+(defn loop-stmt [diagram loop-unit units]
+  (let [end-loop-body (-> loop-unit .getTarget)
         find-next-unit (fn [unit]
-                         (if (instance? JIfStmt unit)
-                           (-> units (.getSuccOf unit))
-                           (recur (-> units (.getSuccOf unit))))) 
-        merged-diagram (d/multi-apply 
-                         diagram
-                         (fn [diagram]
-                           (infer-frame-helper diagram units 
-                             (-> units (.getSuccOf unit)) 
-                             end-loop-body))
-                         [[] []])]
-    [merged-diagram (find-next-unit end-loop-body)]))
+                         (cond 
+                           (= unit nil) [nil false]
+                           (instance? JIfStmt unit) (if (= (-> unit .getTarget)
+                                                               (-> units (.getSuccOf loop-unit)))
+                                                      [(-> units (.getSuccOf unit)) true]
+                                                      [nil false])
+                           (instance? JGotoStmt unit) [nil false]
+                           :else (recur (-> units (.getSuccOf unit)))))
+        next (find-next-unit end-loop-body)
+        merged-diagram (if (second next)
+                         (d/multi-apply 
+                           diagram
+                           (fn [diagram]
+                             (infer-frame-helper diagram units 
+                               (-> units (.getSuccOf loop-unit)) 
+                               end-loop-body))
+                           [[] []])
+                         diagram) 
+        ]
+    [merged-diagram (first next)]))
 
 (defn cur-value [diagram object field]
   (let [must-found (filter
@@ -266,12 +284,12 @@
                                                            (fn [x] (= (second x) field))
                                                            (first edge-pair))
                                        old-mays-removed (remove
-                                                           (fn [x] (= (second x) field))
-                                                           (second edge-pair))
-                                       new-musts (clojure.set/union old-musts-removed (merged-musts field))
-                                       new-mays (clojure.set/union old-mays-removed (merged-mays field))]
+                                                          (fn [x] (= (second x) field))
+                                                          (second edge-pair))
+                                       new-musts (clojure.set/union (set old-musts-removed) (set (merged-musts field)))
+                                       new-mays (clojure.set/union (set old-mays-removed) (set (merged-mays field)))]
                                    [new-musts new-mays])
-                                 (let [new-mays (clojure.set/union (second edge-pair) (merged-mays field) (merged-musts field))]
+                                 (let [new-mays (clojure.set/union (set (second edge-pair)) (set (merged-mays field)) (set (merged-musts field)))]
                                    [(first edge-pair) new-mays])))
                              (for [x (clojure.set/union 
                                        (set (keys merged-musts))
@@ -305,7 +323,6 @@
                   (if (not (instance? JStaticInvokeExpr (-> unit .getInvokeExpr)))
                     [(-> unit .getInvokeExpr .getBase)]) 
                   (-> unit .getInvokeExpr .getArgs))
-        ;tmp (dbg method) 
         mapping-results (compute-mappings call-diagram ctxt-diagram (call-diagram :formals) actuals)
         call2ctxt (first mapping-results)
         new-ctxt-diagram (assoc ctxt-diagram :may-read (second mapping-results)) 
@@ -327,20 +344,20 @@
 (-> started-analysis .clear)
 
 (defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
-  (let [;dbg (dbg/d unit)
+  (let [;dbg (println unit "::" (first (-> unit .getTags)) "::" (diagram :tag))
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
                (-> unit .containsInvokeExpr) (call-stmt diagram unit)
                (and (instance? JGotoStmt unit) (not (instance? IdentityStmt (-> units (.getSuccOf unit))))) (loop-stmt diagram unit units)
                (instance? JGotoStmt unit) (try-catch-stmt diagram unit) 
-               (instance? JIfStmt unit) (if-stmt diagram unit units)
+               (instance? JIfStmt unit) (if-stmt diagram unit units end-unit)
                (instance? JTableSwitchStmt unit) diagram ; TODO 
                (instance? ReturnStmt unit) (return-stmt diagram unit) 
                :else diagram) ; Any other kind of stmt is ignored.. (throws , enter/exit monitor, breakpoint)
         ^Stmt next-unit (if (sequential? next)
-                    (second next)
-                    (-> units (.getSuccOf unit)))
+                          (second next)
+                          (-> units (.getSuccOf unit)))
         next-diagram (if (sequential? next)
                        (first next)
                        next)
@@ -352,10 +369,11 @@
 
 (def infer-frame-from-scratch 
   (memo (fn [^SootMethod method]
-          (println "Analysing method:" method)
+          ;(println "Analysing method:" method)
           (let [body (-> method .getActiveBody)
                 units (-> body .getUnits)
                 diagram (-> (d/new-diagram [])
+                          (d/add-tag (-> method .getSignature)) 
                           (d/add-object [d/ANY-OBJ]))]
             (if (-> started-analysis (.contains method))
               (let [] 
@@ -375,10 +393,8 @@
            (from which you can determine the body's frame condition)"
   (if (or 
         (not (-> method .hasActiveBody))
-        (= (-> method .getName) "ajc$perObjectBind")) ; No idea why, but this particular method makes the memo cache throw an NPE..
-    (let []
-      (println "!!! No body for method " method)
-      (l/get-frame-from-library method))
+        (= (-> method .getName) "ajc$perObjectBind")) ; No idea why, but only this particular method makes the memo cache throw an NPE..
+    (l/get-frame-from-library method)
     (infer-frame-from-scratch method)
     ))
 
@@ -396,11 +412,13 @@
                 [x])
         
         root-map (d/multi-apply
-                   {}
-                   (fn [m x]
-                     (assoc m 
-                       (first (d/find-objs-by-name diagram x))
-                       (subs (name x) 1)))
+                   [{} (diagram :may-read)]
+                   (fn [pair x]
+                     (let [root-obj (first (d/find-objs-by-name diagram x))
+                           cur-val ((second pair) root-obj)]
+                       [(assoc (first pair) root-obj 
+                          (subs (name x) 1))
+                        (assoc (second pair) root-obj (clojure.set/union #{} cur-val))]))
                    roots)
         
         get-assignable (fn [read-edges read-paths clause]
@@ -427,9 +445,8 @@
                                (recur 
                                  (dissoc read-edges cur-obj)
                                  new-read-paths
-                                 new-clause))
-                             )))]
-    (get-assignable (diagram :may-read) root-map [])))
+                                 new-clause)))))]
+    (get-assignable (second root-map) (first root-map) [])))
 
 (defn compare-assignable-clauses [master slave]
   (filter

@@ -39,12 +39,16 @@
         names (zipmap
                 (concat root-names names)
                 (concat id-sets id-sets))]
-    {:names names
+    {:method method-name
+     :names names
      :formals []
     :must-mod {}
     :may-mod {}
     :may-read {}
     :return #{}}))
+
+(defn add-tag [diagram tag]
+  (assoc diagram)) 
 
 (defn add-name [diagram objects name]
   "A set of objects can now be referred to by an additional name."
@@ -196,8 +200,7 @@
     (for [x (clojure.set/union (set (keys one)) (set (keys two)))] [x])))
 
 (defn merge-diagrams [d1 d2]
-  (let [new-diag (new-diagram [])
-        merged-names (multi-apply (d1 :names)
+  (let [merged-names (multi-apply (d1 :names)
                        (fn [names-map key]
                          (let [old-val (names-map key)
                                new-val ((d2 :names) key)]
@@ -209,7 +212,8 @@
         merged-mays (union-edges 
                       (union-edges (d1 :may-mod) (d2 :may-mod)) 
                       (second intersect))]
-    (-> (new-diagram []) 
+    (-> (new-diagram [])
+      (assoc :tag (d1 :tag)) 
       (assoc :names merged-names)
       (assoc :formals (d1 :formals)) 
       (assoc :may-read merged-reads)
