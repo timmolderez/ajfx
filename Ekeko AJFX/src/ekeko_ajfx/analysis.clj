@@ -23,6 +23,7 @@
 ;;; Intraprocedural analysis ;;; 
 
 (defn identity-stmt [diagram ^JIdentityStmt unit]
+  "Analyse an identify statement (which defines formal parameters)" 
   (let [name (-> unit .getLeftOp .getName)
         is-primitive (instance? PrimType (-> unit .getRightOp .getType))
         new-id (if is-primitive
@@ -77,6 +78,7 @@
       (d/add-edges after-rm lhs-recv lhs-field :may-mod rhs-name))))
 
 (defn new-stmt [diagram lhs rhs]
+  "Analyse a = new c();" 
   (let [cls-name (-> rhs .getType .toString)
         lhs-name (-> lhs .toString)
         obj-name (str "@" cls-name (d/new-obj-id))]
@@ -84,10 +86,12 @@
       (d/add-object [obj-name lhs-name]))))
 
 (defn array-write-stmt [diagram lhs rhs]
+  "Analyse a[x] = b;" 
   (let [arr (-> lhs .getBaseBox .toString)]
     (d/add-edges diagram arr "element" :may-mod d/ANY-OBJ)))
 
 (defn assign-stmt [diagram unit]
+  "Analyse an assignment statement" 
   (let [lhs (-> unit .getLeftOp)
         rhs (-> unit .getRightOp)]
     (cond
@@ -106,6 +110,7 @@
       )))
 
 (defn if-stmt [diagram unit units end-unit]
+  "Analyse an if statement" 
   (if (-> units (.follows unit (-> unit .getTarget))) ; This shouldn't happen..
     [diagram (-> units (.getSuccOf unit))]
     (let [begin-else (-> unit .getTarget)
@@ -132,9 +137,11 @@
     [merged-diagram bounded-next-unit])))
 
 (defn try-catch-stmt [diagram unit]
-  [diagram (-> unit .getTarget)]) ; Don't change the diagram, and just skip the catch blocks..
+  "Ignore catch blocks in try-catch statements (for now..)" 
+  [diagram (-> unit .getTarget)])
 
 (defn loop-stmt [diagram loop-unit units]
+  "Analyse any kind of loop statement" 
   (let [end-loop-body (-> loop-unit .getTarget)
         find-next-unit (fn [unit]
                          (cond 
@@ -147,7 +154,7 @@
                            :else (recur (-> units (.getSuccOf unit)))))
         next (find-next-unit end-loop-body)
         merged-diagram (if (second next)
-                         (d/multi-apply 
+                         (u/multi-apply 
                            diagram
                            (fn [diagram]
                              (infer-frame-helper diagram units 
@@ -159,6 +166,7 @@
     [merged-diagram (first next)]))
 
 (defn cur-value [diagram object field]
+  "Retrieve the current potential values of a particular field of object" 
   (let [must-found (filter
                      (fn [x] (= field (second x)))
                      ((diagram :must-mod ) object))]
@@ -169,6 +177,7 @@
       must-found)))
 
 (defn return-stmt [diagram unit]
+  "Analyse a return statement" 
   (let [value (-> unit .getOp)]
     (if (instance? JimpleLocal value)
       [(d/add-return-val diagram (-> value .toString)) nil]
@@ -177,7 +186,8 @@
 ;;; Interprocedural analysis ;;;
 
 (defn compute-mappings [call-diag ctxt-diag formals actuals]
-  (let [mapped-roots (d/multi-apply 
+  "Compute the mapping between objects in call-diag to the objects in ctxt-diag" 
+  (let [mapped-roots (u/multi-apply 
                        {(first (d/find-objs-by-name call-diag d/ANY-OBJ)) (d/find-objs-by-name ctxt-diag d/ANY-OBJ)}
                        (fn [m root] 
                          (let [index (.indexOf formals (subs (name root) 1))] 
@@ -207,11 +217,11 @@
                                           (rest objects)
                                           (for [x read-edges] (first x)))
                             
-                            new-pair (d/multi-apply pair
+                            new-pair (u/multi-apply pair
                                        (fn [pair call-tgt label]
                                          (let [ctxt-edges (reduce clojure.set/union
                                                             (for [x ctxt-objs] (cur-value ctxt-diag x label)))]
-                                           (d/multi-apply pair
+                                           (u/multi-apply pair
                                              (fn [pair ctxt-obj]
                                                (let [m (first pair)
                                                      ctxt-reads (second pair)
@@ -236,7 +246,8 @@
     (map-objects [mapped-roots (ctxt-diag :may-read)] (keys mapped-roots))))
 
 (defn adjust-edges [ctxt-diag call-diag call2ctxt ctxt2call]
-  (d/multi-apply 
+  "Update the field values in ctxt-diag to reflect the new values produced by call-diag" 
+  (u/multi-apply 
     ctxt-diag
     (fn [ctxt-diag ctxt-obj]
       (let [call-objs (ctxt2call ctxt-obj)
@@ -275,7 +286,7 @@
             
             merged-mays (apply merge-with map-and-union may-field-groups)
             
-            adjusted-edges (d/multi-apply
+            adjusted-edges (u/multi-apply
                              [((ctxt-diag :must-mod) ctxt-obj) ((ctxt-diag :may-mod) ctxt-obj)]
                              (fn [edge-pair field] 
                                (if (and 
@@ -305,17 +316,20 @@
     (for [x (keys ctxt2call)] [x])))
 
 (defn invert-mapping [m]
+  "Invert a mapping of objects in the body being called, to the objects in the calling context,
+   such that you get a mapping from objects in the context, to the objects in the called body" 
   ; For each key in m
-  (d/multi-apply {}
+  (u/multi-apply {}
     (fn [inv-m key]
       ; For each value of key
-      (d/multi-apply inv-m
+      (u/multi-apply inv-m
         (fn [inv-m val] 
           (assoc inv-m val (conj (inv-m val) key)))
         (for [x (m key)] [x])))
     (for [x (keys m)] [x])))
 
 (defn call-stmt [ctxt-diagram unit]
+  "Analyse a method/constructor call" 
   (let [method (-> unit .getInvokeExpr .getMethod)
         return-name (if (instance? JAssignStmt unit)
                       (-> unit .getLeftOp .getName)
@@ -346,6 +360,7 @@
 (-> started-analysis .clear)
 
 (defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
+  "Analyse the unit statement, which is part of units, and this body ends at end-unit" 
   (let [;dbg (println unit "::" (first (-> unit .getTags)) "::" (diagram :tag))
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
@@ -369,6 +384,7 @@
       (infer-frame-helper next-diagram units next-unit end-unit)
       next-diagram)))
 
+; Analyse a method body to produce its final aliasing diagram; this function is memoized to avoid analysing the same method twice
 (def infer-frame-from-scratch 
   (memo (fn [^SootMethod method]
           ;(println "Analysing method:" method)
@@ -388,11 +404,12 @@
                   frame)))))))
 
 (defn clear-cache []
+  "Clear the memoization cache used by the analysis" 
   (memo-clear! infer-frame-from-scratch))
 
 (defn infer-frame [^SootMethod method]
   "Infer the aliasing diagram of a given method body
-           (from which you can determine the body's frame condition)"
+   (from which you can determine the body's assignable and accessible clauses.)"
   (if (or 
         (not (-> method .hasActiveBody))
         (= (-> method .getName) "ajc$perObjectBind")) ; No idea why, but only this particular method makes the memo cache throw an NPE..
@@ -403,40 +420,42 @@
 
 
 (defn get-clauses-from-diagram [diagram]
+  "Given an aliasing diagram, return an accessible clause and an assignable clause,
+   which respectively describe what may be accessed, and what may be modified by a method." 
   (let [roots (for [x (filter
                         (fn [x] (and 
                                   (-> (name x) (.startsWith  "@"))
                                   (contains? 
                                     (set (diagram :formals))
                                     (subs (name x) 1))
-                                  ))
+                                    ))
                         (keys (diagram :names)))] 
-                [x])
+                  [x])
         
-        root-map (d/multi-apply
+        root-map (u/multi-apply
                    [{} (diagram :may-read)]
                    (fn [pair x]
-                     (let [root-obj (first (d/find-objs-by-name diagram x))
-                           cur-val ((second pair) root-obj)]
-                       [(assoc (first pair) root-obj 
-                          (subs (name x) 1))
+                       (let [root-obj (first (d/find-objs-by-name diagram x))
+                             cur-val ((second pair) root-obj)]
+                         [(assoc (first pair) root-obj 
+                            (subs (name x) 1))
                         (assoc (second pair) root-obj (clojure.set/union #{} cur-val))]))
                    roots)
         
         get-assignable (fn [read-edges read-paths clause]
-                         (let [worklist (clojure.set/intersection 
+                           (let [worklist (clojure.set/intersection 
                                           (set (keys read-edges))
                                           (set (keys read-paths)))]
-                           (if (empty? worklist)
-                             [read-paths clause]
-                             (let [cur-obj (first worklist)
+                             (if (empty? worklist)
+                               [read-paths clause]
+                               (let [cur-obj (first worklist)
                                    cur-path (read-paths cur-obj)
-                                   new-read-paths (d/multi-apply
+                                   new-read-paths (u/multi-apply
                                                     read-paths
                                                     (fn [r tgt label]
                                                       (assoc r tgt (str cur-path "." label)))
                                                     (read-edges cur-obj))
-                                   new-clause (d/multi-apply
+                                   new-clause (u/multi-apply
                                                 clause
                                                 (fn [c tgt label]
                                                   (conj c (str (read-paths cur-obj) "." label)))
@@ -451,6 +470,9 @@
     (get-assignable (second root-map) (first root-map) [])))
 
 (defn compare-assignable-clauses [master slave]
+  "Compare the assignable clauses of two SootMethods, such that slave may not modify more than master
+   A list of modifications that are not allowed is returned.
+   " 
   (filter
     (fn [x]
       (some

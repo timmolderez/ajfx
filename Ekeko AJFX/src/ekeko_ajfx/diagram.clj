@@ -1,21 +1,42 @@
 (ns
-  ^{:doc "Defines the aliasing diagrams to be used by the frame inference algorithm, and its operations
+  ^{:doc "Defines the aliasing diagrams to be used by the frame inference analysis
           
           To give an idea of what the data structure behind an alias diagram looks like:
-          {:names { // Maps objects to the names of that object
-             :bla #{:1 :2}}
-           :must-mod { // Maps the source of edges to its names and its targets
-             :0 #{['f' :1] ['g' :3]}
-             ...
-             }
-           :may-mod { ... }
-           :may-read { ... }
+
+          {
+           // Meta-info about the diagram (usually the signature of the method body being analysed)
+           :tag "void Delta.foxtrot(int,Hotel)"
+
+           // Names of the formal parameters of the method being analysed
+           :formals ['delta' 'romeo' 'foxtrot']
+
+           // Set of objects that might represent a return value
+           // Note that each object is represented as a keyword with a unique identifier
            :return #{:1 :3}
+           
+           // Maps variable names to the objects they can refer to
+           :names { 
+             :bravo #{:1 :2}
+             :charlie #{:4 :6}
+             :romeo #{:4 :3 :5}}
+           
+           // Must-be-modified edges; such an edge indicates that the field of an object must have been modified, and its target is the potential new value
+           // The edges are represented as a map, where the source object of each edge is mapped to a set of pairs containing the target object and field name 
+           :must-mod {  
+             :0 #{[:1 'alpha'] [:3 'whisky']}
+             :4 #{[ :4 'zulu'] [:3 'bravo'] [:3 'delta']}}
+
+           // May-be-modified edges; indicating that the field of an object may, or may not, have been modified
+           :may-mod { ... }
+
+           // May-be-read edges; indicating that the field of an object is accessed
+           :may-read { ... }
           }"
     :author "Tim Molderez" }
-  ekeko-ajfx.diagram)
+  ekeko-ajfx.diagram
+  (:require [ekeko-ajfx.util :as u]))
 
-
+; Name of the special object that is used to represent any object
 (def ANY-OBJ "%ANY")
 
 ; Ensures all objects within a graph have a unique identifier
@@ -46,6 +67,7 @@
     :return #{}}))
 
 (defn add-tag [diagram tag]
+  "Set the tag of this diagram"
   (assoc diagram :tag tag)) 
 
 (defn add-name [diagram objects name]
@@ -57,6 +79,7 @@
     (assoc diagram :names new-names)))
 
 (defn add-formal [diagram name]
+  "Add an additional formal parameter name"
   (let [new-formals (conj (diagram :formals) name)]
     (assoc diagram :formals new-formals))) 
 
@@ -152,13 +175,15 @@
     (assoc diagram kind new-edges)))
 
 (defn add-return-val [diagram name]
+  "Any objects that the given name refers to are marked as a return value"
   (let [return-val (diagram :return)
         objs (find-objs-by-name diagram name)
         new-return-val (clojure.set/union return-val objs)]
     (assoc diagram :return new-return-val)))
 
 (defn union-edges [one two]
-  (multi-apply
+  "Union two sets of edges"
+  (u/multi-apply
     one
     (fn [map key]
       (let [old-val (map key)
@@ -167,7 +192,8 @@
     (for [x (keys two)] [x])))
 
 (defn intersect-edges [one two]
-  (multi-apply
+  "Intersect two sets of edges (but disregarding the target of each edge!)"
+  (u/multi-apply
     [{} {}]
     (fn [pair key]
       (let [one-val (one key)
@@ -191,7 +217,8 @@
     (for [x (clojure.set/union (set (keys one)) (set (keys two)))] [x])))
 
 (defn merge-diagrams [d1 d2]
-  (let [merged-names (multi-apply (d1 :names)
+  "Merge two diagrams occuring in the same method body (e.g. one is the result of analysing an if-branch, and the other is the else-branch)"
+  (let [merged-names (u/multi-apply (d1 :names)
                        (fn [names-map key]
                          (let [old-val (names-map key)
                                new-val ((d2 :names) key)]
