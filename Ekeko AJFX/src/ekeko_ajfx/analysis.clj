@@ -106,7 +106,9 @@
       )))
 
 (defn if-stmt [diagram unit units end-unit]
-  (let [begin-else (-> unit .getTarget)
+  (if (-> units (.follows unit (-> unit .getTarget))) ; This shouldn't happen..
+    [diagram (-> units (.getSuccOf unit))]
+    (let [begin-else (-> unit .getTarget)
         end-if (-> units (.getPredOf begin-else))
         has-else (instance? JGotoStmt end-if)
         end-else (if has-else (-> end-if .getTarget) nil)
@@ -120,14 +122,14 @@
                        diagram)
         merged-diagram (d/merge-diagrams if-diagram else-diagram)
         next-unit (if (and has-else (-> units (.follows (-> end-if .getTarget) end-if))) 
-                    end-else
-                    begin-else)
-        bounded-next-unit (if (and ; If next-unit goes outside the body being analysed, the analysis should stop here.
-                                (not= nil end-unit) 
-                                (-> units (.follows next-unit end-unit))) 
+                     end-else
+                     begin-else)
+         bounded-next-unit (if (and ; If next-unit goes outside the body being analysed, the analysis should stop here.
+                                 (not= nil end-unit) 
+                                 (-> units (.follows next-unit end-unit))) 
                       nil
                       next-unit)]
-    [merged-diagram bounded-next-unit]))
+    [merged-diagram bounded-next-unit])))
 
 (defn try-catch-stmt [diagram unit]
   [diagram (-> unit .getTarget)]) ; Don't change the diagram, and just skip the catch blocks..
@@ -169,8 +171,8 @@
 (defn return-stmt [diagram unit]
   (let [value (-> unit .getOp)]
     (if (instance? JimpleLocal value)
-      (d/add-return-val diagram (-> value .toString))
-      diagram)))
+      [(d/add-return-val diagram (-> value .toString)) nil]
+      [diagram nil])))
 
 ;;; Interprocedural analysis ;;;
 

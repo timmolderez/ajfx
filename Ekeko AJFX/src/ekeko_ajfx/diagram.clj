@@ -13,8 +13,7 @@
            :return #{:1 :3}
           }"
     :author "Tim Molderez" }
-  ekeko-ajfx.diagram
-  (:use [inspector-jay.core]))
+  ekeko-ajfx.diagram)
 
 
 (def ANY-OBJ "%ANY")
@@ -157,13 +156,6 @@
         objs (find-objs-by-name diagram name)
         new-return-val (clojure.set/union return-val objs)]
     (assoc diagram :return new-return-val)))
-
-(defn multi-apply [x func args]
-  (let [helper (fn [input args]
-                 (if (empty? args)
-                   input
-                   (recur (apply func input (first args)) (rest args))))]
-    (helper x args)))
 
 (defn union-edges [one two]
   (multi-apply

@@ -1,5 +1,5 @@
 (ns
-  ^{:doc "Extra relations to query Soot control-flow graph."
+  ^{:doc "Extra Soot relations for use in Ekeko queries"
     :author "Tim Molderez" }
   ekeko-ajfx.soot
   (:refer-clojure :exclude [== type declare class])
@@ -37,33 +37,10 @@
    IndexOfText  
    [from to](> (.indexOf from to) -1))
 
-;(inspect-tree
-;(damp.ekeko/ekeko 
-;  [?a ?b]
-;  (l/fresh []
-;           (w/aspect-advice ?a ?b)
-;           (equals "bank.aspects.Security" (-> ?a .getName))
-;           (w/advice|before ?b))))
-;
-;(inspect-tree (ekeko [?a ?c] 
-;                     (w/aspect-shadow ?a ?c)))
-;
-;(inspect-tree (ekeko [?b ?a]
-;   (l/fresh []
-;       (advice-soot|unit ?a ?b))))
-
-;(inspect
-;(damp.ekeko/ekeko [?a ?b]
-;           (w/advice ?a)
-;           (ajsoot/advice-soot|method ?a ?b)))
-
-(count (ekeko [?a] (w/advice ?a)))
-
-
 (defn get-class-name
   "Retrieve the (absolute) class name of an object
-@param obj  a Java object
-@return     absolute class name"
+   @param obj  a Java object
+   @return     absolute class name"
   [obj]
   (.getName (.getClass obj)))
 
@@ -141,6 +118,7 @@
     (equals ?sig (-> ?method .getSignature))))
 
 (defn strip-advice-id [sig]
+  "Given the signature of an advice, strip the internally generated ID number.."
   (let [end-id (-> sig (.lastIndexOf "("))
         substr (subs sig 0 end-id)
         begin-id (-> substr (.lastIndexOf "$"))]
@@ -242,19 +220,16 @@
     (equals ?split (clojure.string/split ?methodName #"\$")) 
     (equals "ajc" (nth ?split 0))
     (equals "inlineAccessMethod" (nth ?split 1) )
-    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))
-           ))
+    (equals ?val (.getValue(nth (.getUseBoxes ?unit) 0)))))
 
 (defn
-  virtMethodCall-receiver
-  [?val ?unit]
+  virtMethodCall-receiver [?val ?unit]
   (l/fresh [?adv ?expr]
     (advice-soot|unit ?adv ?unit)
     (jsoot/soot-unit :JInvokeStmt ?unit)
     (equals ?expr (.getInvokeExpr ?unit))
     (equals "JVirtualInvokeExpr" (.getSimpleName(.getClass ?expr)))
-    (equals ?val (.getBase ?expr))
-           ))
+    (equals ?val (.getBase ?expr))))
 
 (defn 
   advice|field|get-soot|field
@@ -263,12 +238,10 @@
   (l/fresh [?getMethod ?value ?unit]
            (w/advice ?advice)
            (advice-soot|unit ?advice ?unit)
-           (l/conde [
-                     (soot|unit|invocation-soot|value|invocation ?unit ?value)
+           (l/conde [(soot|unit|invocation-soot|value|invocation ?unit ?value)
                      (soot|value|invocation-soot|method ?value ?getMethod)
                      (soot|method|ajcfield|get-soot|field ?getMethod ?field)]
-                    [
-                     (jsoot/soot|unit|reads-soot|field ?unit ?field)])))
+                    [(jsoot/soot|unit|reads-soot|field ?unit ?field)])))
 
 (defn 
   adviceFieldSet-container-field

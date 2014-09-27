@@ -34,22 +34,29 @@
      SuperFieldAccess FieldAccess ConstructorInvocation ASTNode ASTNode$NodeList CompilationUnit]
     [org.aspectj.weaver.patterns Pointcut AndPointcut]))
 
-;
-;(:import (java.util.concurrent TimeoutException TimeUnit FutureTask)
-;           (clojure.lang LispReader$ReaderException))
+(defmacro d[x]
+ "Debugging macro; apply it to an expression and its result is printed to console (and returned too)"
+ (if true
+    `(let [x# ~x] (println "dbg:" '~x "=" x#) x#)
+    x)) 
 
-(def VERBOSE true)
+(defn multi-apply [x func args]
+  "Apply func multiple times with different sets of arguments, in order to transform x into its final value.
+   (It kind of combines the threading macro with the apply function..) This is useful, for example, when 
+   you need to iterate over a collection to fill up a map structure.
 
-; Debugging macro, any function can be wrapped in (d ) 
-(defmacro d[x] (if VERBOSE
-                 `(let [x# ~x] (println "dbg:" '~x "=" x#) x#)
-                 x)) 
+   More precisely, the function func is called with x as the 1st argument, and the 1st element of args as the remainder of the arguments.
+   (So args must be a list of lists..) Function func is then called again, using the result of the previous call as the 1st argument, 
+   using the 2nd element of args as the remainder of the arguments. ... Func is called over and over again, until args is exhausted." 
+  (let [helper (fn [input args]
+                 (if (empty? args)
+                   input
+                   (recur (apply func input (first args)) (rest args))))]
+    (helper x args)))
 
 
-
-(defn showUnitCFG
+(defn showUnitCFG [body]
   "Use Ekeko's visualizer to show the unit control-flow graph of a Soot Body"
-  [body]
   (let 
     [labelProvider (damp.ekeko.gui.EkekoLabelProvider.)
      graph (new ExceptionalUnitGraph body)
@@ -76,9 +83,8 @@
       :layout
       layout|tree)))
 
-(defn showBlockCFG
+(defn showBlockCFG [body]
   "Use Ekeko's visualizer to show the block control-flow graph of a Soot Body"
-  [body]
   (let 
     [labelProvider (damp.ekeko.gui.EkekoLabelProvider.)
      graph (new ExceptionalBlockGraph body)
@@ -86,28 +92,27 @@
      toString (fn [block] (.toString block))]
     (ekeko-visualize
       ; nodes
-     (into []
-            (map vector (map (fn [block] (toString block)) blocks))) 
-    
-    ; edges
-    (into [] (mapcat identity (map (fn [block] ; for each block
-                                     (map (fn [succ] ; for each successor of block
-                                            [(toString block) (toString succ)])
-                                          (-> graph (.getSuccsOf block))))
-                                   blocks)))
-    
-    :node|label
-    (fn [node] (.getText labelProvider node))
-    :node|image 
-    (fn [node] (.getImage labelProvider node))
-    :edge|style 
-    (fn [src dest] edge|directed)
-    :layout
-    layout|tree)))
+      (into []
+        (map vector (map (fn [block] (toString block)) blocks))) 
+      
+      ; edges
+      (into [] (mapcat identity (map (fn [block] ; for each block
+                                       (map (fn [succ] ; for each successor of block
+                                              [(toString block) (toString succ)])
+                                         (-> graph (.getSuccsOf block))))
+                                  blocks)))
+      
+      :node|label
+      (fn [node] (.getText labelProvider node))
+      :node|image 
+      (fn [node] (.getImage labelProvider node))
+      :edge|style 
+      (fn [src dest] edge|directed)
+      :layout
+      layout|tree)))
 
-(defn getAdviceN
+(defn getAdviceN [n] 
   "Get the nth advice body in the system (as a Soot method)" 
-  [n]
   (first (nth 
            (ekeko [?method]
                   (l/fresh [?advice]
@@ -128,6 +133,7 @@
 
 ; Taken from https://github.com/flatland/clojail/blob/master/src/clojail/core.clj
 (defmacro with-timeout [time & body]
+  "Apply this macro to an expression and an exception is thrown if it takes longer than a given time to evaluate the expression" 
   `(thunk-timeout (fn [] ~@body) ~time))
 
 ; Taken from https://github.com/flatland/clojail/blob/master/src/clojail/core.clj
@@ -155,10 +161,6 @@
           (.stop thr) 
           (throw e))
         (finally (when tg (.stop tg)))))))
-
-;(defmacro time-limited [ms & body]
-;  `(let [f# (future ~@body)]
-;     (.get f# ~ms java.util.concurrent.TimeUnit/MILLISECONDS)))
 
 ;(showBlockCFG (-> (getAdviceN 0) .getActiveBody))
 ;(inspect (-> (getAdviceN 0) .getActiveBody))
