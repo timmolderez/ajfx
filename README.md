@@ -8,7 +8,7 @@ ajFX provides a frame inference analysis for Java and AspectJ applications. It i
 To get started, you will need the following:
 
 - [Eclipse](https://www.eclipse.org/) (tested using Eclipse Kepler and Luna)
-- [Ekeko](https://github.com/cderoove/damp.ekeko), a meta-programming library to reason about Java code
+- [Ekeko](https://github.com/cderoove/damp.ekeko), a meta-programming library to query/analyse/transform Java code
 - For AspectJ support (optional): [AJDT](http://www.eclipse.org/ajdt/) (tested on version 2.2.3) and [Ekeko's AspectJ extension](https://github.com/cderoove/damp.ekeko.aspectj)
 
 Once this is done:
@@ -24,4 +24,4 @@ Once this is done:
 - In the original Eclipse instance, open up the ekeko_ajfx/core.clj file
 - Clojure > Load file in REPL (This should take less than a minute..)
 - Clojure > Switch REPL to File's Namespace
-- ajFX is now at your disposal (and Ekeko and Soot are too). Try running ```(inspect (analyse-all-bodies))``` to analyse all method/advice bodies, and open an [Inspector](https://github.com/timmolderez/inspector-jay) window to browse the results.
+- ajFX is now at your disposal (and Ekeko and Soot are too)! Try running ```(inspect (analyse-all-bodies))``` to analyse all method/advice bodies, and open an [Inspector](https://github.com/timmolderez/inspector-jay) window to browse the results.
