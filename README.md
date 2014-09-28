@@ -9,7 +9,7 @@ To get started, you will need the following:
 
 - [Eclipse](https://www.eclipse.org/) (tested using Eclipse Kepler and Luna)
 - [Ekeko](https://github.com/cderoove/damp.ekeko), a meta-programming library to reason about Java code
-- For AspectJ support: [AJDT](http://www.eclipse.org/ajdt/) (tested on version 2.2.3) and [Ekeko's AspectJ extension](https://github.com/cderoove/damp.ekeko.aspectj)
+- For AspectJ support (optional): [AJDT](http://www.eclipse.org/ajdt/) (tested on version 2.2.3) and [Ekeko's AspectJ extension](https://github.com/cderoove/damp.ekeko.aspectj)
 
 Once this is done:
 
