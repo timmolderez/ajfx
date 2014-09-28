@@ -18,7 +18,7 @@ Once this is done:
 - Run it as an 'Eclipse application' to start a new instance of Eclipse
 - In this new instance, open/import whatever Java/AspectJ project you want to analyse
 - Right-click the project > Configure > Include in Ekeko queries
-- Right-click the project again > Configure > Ekeko Properties > Fill in "-no-bodies-for-excluded -src-prec c -f jimple -keep-line-number -app -w -p jb use-original-names:true -p cg.cha" in the "Soot arguments:" text box.
+- Right-click the project again > Configure > Ekeko Properties > Fill in ```-no-bodies-for-excluded -src-prec c -f jimple -keep-line-number -app -w -p jb use-original-names:true -p cg.cha``` in the "Soot arguments:" text box.
 - Right-click the project again > Configure > Enable Ekeko Soot Analyses (Depending on the size of the project, this might take a few seconds up to a few minutes; the [Soot](http://www.sable.mcgill.ca/soot/) framework is currently converting the project to Jimple code, which is the intermediate representation that ajFX uses..)
 - Ekeko > start nREPL (This should open up a Clojure REPL in the original Eclipse instance.)
 - In the original Eclipse instance, open up the ekeko_ajfx/core.core.clj file
