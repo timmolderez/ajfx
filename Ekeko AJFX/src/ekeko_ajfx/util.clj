@@ -130,6 +130,9 @@
                  alias aliases]
              {alias enum})))
 
+(defn average [numbers]
+  "Calculate the average of a list of numbers" 
+  (/ (double (apply + numbers)) (count numbers)))
 
 ; Taken from https://github.com/flatland/clojail/blob/master/src/clojail/core.clj
 (defmacro with-timeout [time & body]

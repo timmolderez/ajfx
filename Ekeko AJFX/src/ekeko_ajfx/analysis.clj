@@ -3,8 +3,7 @@
     :author "Tim Molderez" }
   ekeko-ajfx.analysis
   (:use 
-    [inspector-jay.core]
-    [clojure.core.memoize])
+    [inspector-jay.core])
   (:require 
     [ekeko-ajfx.diagram :as d]
     [ekeko-ajfx.library :as l]
@@ -136,9 +135,11 @@
                       next-unit)]
     [merged-diagram bounded-next-unit])))
 
-(defn try-catch-stmt [diagram unit]
+(defn try-catch-stmt [diagram unit units]
   "Ignore catch blocks in try-catch statements (for now..)" 
-  [diagram (-> unit .getTarget)])
+  (if  (-> units (.follows (-> unit .getTarget) unit))
+    [diagram (-> unit .getTarget)]
+    [diagram (-> units (.getSuccOf unit))]))
 
 (defn loop-stmt [diagram loop-unit units]
   "Analyse any kind of loop statement" 
@@ -166,7 +167,7 @@
     [merged-diagram (first next)]))
 
 (defn cur-value [diagram object field]
-  "Retrieve the current potential values of a particular field of object" 
+  "Retrieve the current potential values of a particular field of an object" 
   (let [must-found (filter
                      (fn [x] (= field (second x)))
                      ((diagram :must-mod ) object))]
@@ -191,7 +192,7 @@
                        {(first (d/find-objs-by-name call-diag d/ANY-OBJ)) (d/find-objs-by-name ctxt-diag d/ANY-OBJ)}
                        (fn [m root] 
                          (let [index (.indexOf formals (subs (name root) 1))] 
-                           (if (not= index -1)
+                           (if (and (not= index -1) (< index (count actuals)))
                              (let [actual (nth actuals index)
                                    ignorable (or 
                                                (= actual nil) 
@@ -229,7 +230,7 @@
                                                      new-val (cur-value ctxt-diag ctxt-obj label)
                                                      new-read-tgt (keyword (str (name ctxt-obj) label))]
                                                  ; Is there a corresponding object in ctxt? If not, create it by adding a new read edge.
-                                                 (if (empty? new-val)
+                      (if (empty? new-val)
                                                    [(assoc m call-tgt (clojure.set/union cur-val #{new-read-tgt} 
                                                                         (for [x new-val] (first x))))
                                                     (assoc ctxt-reads ctxt-obj #{[new-read-tgt label]})]
@@ -334,7 +335,7 @@
         return-name (if (instance? JAssignStmt unit)
                       (-> unit .getLeftOp .getName)
                       nil)
-        call-diagram (infer-frame method)
+        call-diagram (infer-frame method) 
         actuals (concat 
                   (if (not (instance? JStaticInvokeExpr (-> unit .getInvokeExpr)))
                     [(-> unit .getInvokeExpr .getBase)]) 
@@ -361,13 +362,13 @@
 
 (defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
   "Analyse the unit statement, which is part of units, and this body ends at end-unit" 
-  (let [;dbg (println unit "::" (first (-> unit .getTags)) "::" (diagram :tag))
+  (let [dbg (println unit "::" (first (-> unit .getTags)) "::" (diagram :tag))
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
                (-> unit .containsInvokeExpr) (call-stmt diagram unit)
                (and (instance? JGotoStmt unit) (not (instance? IdentityStmt (-> units (.getSuccOf unit))))) (loop-stmt diagram unit units)
-               (instance? JGotoStmt unit) (try-catch-stmt diagram unit) 
+               (instance? JGotoStmt unit) (try-catch-stmt diagram unit units) 
                (instance? JIfStmt unit) (if-stmt diagram unit units end-unit)
                (instance? JTableSwitchStmt unit) diagram ; TODO 
                (instance? ReturnStmt unit) (return-stmt diagram unit) 
@@ -378,6 +379,7 @@
         next-diagram (if (sequential? next)
                        (first next)
                        next)
+        dbg2 (println next-diagram "\n") 
         ;tmp (println next-diagram)
         ]
     (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
@@ -386,7 +388,7 @@
 
 ; Analyse a method body to produce its final aliasing diagram; this function is memoized to avoid analysing the same method twice
 (def infer-frame-from-scratch 
-  (memo (fn [^SootMethod method]
+  (ekeko-ajfx.memoize/memo (fn [^SootMethod method]
           ;(println "Analysing method:" method)
           (let [body (-> method .getActiveBody)
                 units (-> body .getUnits)
@@ -405,7 +407,7 @@
 
 (defn clear-cache []
   "Clear the memoization cache used by the analysis" 
-  (memo-clear! infer-frame-from-scratch))
+  (ekeko-ajfx.memoize/memo-clear! infer-frame-from-scratch))
 
 (defn infer-frame [^SootMethod method]
   "Infer the aliasing diagram of a given method body

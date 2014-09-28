@@ -105,7 +105,7 @@
 
 (defn generate-default-frame [method]
   "Produce a default aliasing diagram for the given SootMethod"
-  (println "!!! Generated default frame for" method "(sig-hash:" (hash (-> method .getSignature)) ")") 
+  ;(println "!!! Generated default frame for" method "(sig-hash:" (hash (-> method .getSignature)) ")") 
   (let [return-type (-> method .getReturnType)
         returns-void (instance? VoidType return-type)
         returns-primitive (instance? PrimType return-type)]

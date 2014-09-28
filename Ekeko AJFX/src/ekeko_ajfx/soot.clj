@@ -64,6 +64,14 @@
         (subs sig 0 begin-id)
         (subs sig end-id)))))
 
+(defn 
+  soot|advice-sig-full
+  "Relate a SootMethod of an advice to its complete signature (disregarding the ID number (?) that's in there)"
+  [?method ?sig]
+  (l/all
+    (jsoot/soot :method ?method)
+    (equals (strip-advice-id ?sig) (strip-advice-id (-> ?method .getSignature)))))
+
 (defn get-all-advice []
   "Retrieve all advice of Ekeko-enabled projects (as BcelAdvice instances)"
   (set (ekeko [?adv] (w/advice ?adv))))
