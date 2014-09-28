@@ -13,7 +13,7 @@ To get started, you will need the following:
 
 Once this is done:
 
-- Clone/download this project
+- Clone/download the ajfx project from GitHub
 - Import the project in Eclipse
 - Run it as an 'Eclipse application' to start a new instance of Eclipse
 - In this new instance, open/import whatever Java/AspectJ project you want to analyse
