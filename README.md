@@ -1,6 +1,3 @@
-ajFX - Frame inference analysis for Java/AspectJ
-================================================
-
 ![ajFX logo](https://raw.githubusercontent.com/timmolderez/ajfx/master/ajFX.png)
 
 
