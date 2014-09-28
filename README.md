@@ -21,7 +21,7 @@ Once this is done:
 - Right-click the project again > Configure > Ekeko Properties > Fill in ```-no-bodies-for-excluded -src-prec c -f jimple -keep-line-number -app -w -p jb use-original-names:true -p cg.cha``` in the "Soot arguments:" text box.
 - Right-click the project again > Configure > Enable Ekeko Soot Analyses (Depending on the size of the project, this might take a few seconds up to a few minutes; the [Soot](http://www.sable.mcgill.ca/soot/) framework is currently converting the project to Jimple code, which is the intermediate representation that ajFX uses..)
 - Ekeko > start nREPL (This should open up a Clojure REPL in the original Eclipse instance.)
-- In the original Eclipse instance, open up the ekeko_ajfx/core.core.clj file
+- In the original Eclipse instance, open up the ekeko_ajfx/core.clj file
 - Clojure > Load file in REPL (This should take less than a minute..)
 - Clojure > Switch REPL to File's Namespace
 - ajFX is now at your disposal (and Ekeko and Soot are too). Try running ```(inspect (analyse-all-bodies))``` to analyse all method/advice bodies, and open an [Inspector](https://github.com/timmolderez/inspector-jay) window to browse the results.
