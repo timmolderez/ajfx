@@ -24,4 +24,4 @@ Once this is done:
 - In the original Eclipse instance, open up the ekeko_ajfx/core.core.clj file
 - Clojure > Load file in REPL (This should take less than a minute..)
 - Clojure > Switch REPL to File's Namespace
-- ajFX is now at your disposal (and Ekeko and Soot are too). Try running ```(inspect (analyse-all-bodies))``` to analyse all method/advice bodies.
+- ajFX is now at your disposal (and Ekeko and Soot are too). Try running ```(inspect (analyse-all-bodies))``` to analyse all method/advice bodies, and open an [Inspector](https://github.com/timmolderez/inspector-jay) window to browse the results.
