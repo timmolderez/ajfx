@@ -7,7 +7,8 @@
   (:require 
     [ekeko-ajfx.diagram :as d]
     [ekeko-ajfx.library :as l]
-    [ekeko-ajfx.util :as u])
+    [ekeko-ajfx.util :as u]
+    [ekeko-ajfx.memoize :as m])
   (:import
     [java.util HashSet]
     [soot SootMethod Unit PatchingChain PrimType] 
@@ -362,7 +363,7 @@
 
 (defn infer-frame-helper [diagram ^PatchingChain units ^Stmt unit ^Stmt end-unit]
   "Analyse the unit statement, which is part of units, and this body ends at end-unit" 
-  (let [dbg (println unit "::" (first (-> unit .getTags)) "::" (diagram :tag))
+  (let [;dbg (println unit "::" (first (-> unit .getTags)) "::" (diagram :tag))
         next (cond 
                (instance? IdentityStmt unit) (identity-stmt diagram unit)
                (and (instance? JAssignStmt unit) (not (-> unit .containsInvokeExpr))) (assign-stmt diagram unit)
@@ -379,8 +380,7 @@
         next-diagram (if (sequential? next)
                        (first next)
                        next)
-        dbg2 (println next-diagram "\n") 
-        ;tmp (println next-diagram)
+        ;dbg2 (println next-diagram "\n") 
         ]
     (if (not (or (= next-unit nil) (-> next-unit (.equals end-unit))))
       (infer-frame-helper next-diagram units next-unit end-unit)
@@ -388,7 +388,7 @@
 
 ; Analyse a method body to produce its final aliasing diagram; this function is memoized to avoid analysing the same method twice
 (def infer-frame-from-scratch 
-  (ekeko-ajfx.memoize/memo (fn [^SootMethod method]
+  (m/memo (fn [^SootMethod method]
           ;(println "Analysing method:" method)
           (let [body (-> method .getActiveBody)
                 units (-> body .getUnits)
